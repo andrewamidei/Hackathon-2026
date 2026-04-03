@@ -1,0 +1,120 @@
+# These are the options I chose to put in our config. Check out link below for more options:
+# https://docs.streamlit.io/develop/api-reference/configuration/config.toml
+
+
+[logger]
+# Level of logging for Streamlit's internal logger: "error", "warning", "info", or "debug".
+#
+# Default: "info"
+level = "info"
+
+[client]
+# Change the visibility of items in the toolbar, options menu, and settings dialog (top right of the app).
+#
+# Allowed values:
+# - "auto"      : Show the developer options if the app is accessed through
+#                 localhost or through Streamlit Community Cloud as a developer.
+#                 Hide them otherwise.
+# - "developer" : Show the developer options.
+# - "viewer"    : Hide the developer options.
+# - "minimal"   : Show only options set externally (e.g. through
+#                 Streamlit Community Cloud) or through st.set_page_config.
+#                 If there are no options left, hide the menu.
+#
+# Default: "auto"
+toolbarMode = "auto"
+
+# Controls whether to display the default sidebar page navigation in a
+# multi-page app. This only applies when app's pages are defined by the
+# `pages/` directory.
+#
+# Default: true
+showSidebarNavigation = true
+
+[runner]
+# Handle script rerun requests immediately, rather than waiting for
+# script execution to reach a yield point.
+#
+# This makes Streamlit much more responsive to user interaction, but it
+# can lead to race conditions in apps that mutate session_state data
+# outside of explicit session_state assignment statements.
+#
+# Default: true
+fastReruns = true
+
+[server]
+# List of directories to watch for changes.
+#
+# By default, Streamlit watches files in the current working directory
+# and its subdirectories. Use this option to specify additional
+# directories to watch. Paths must be absolute.
+#
+# Default: []
+folderWatchList = []
+
+# List of directories to ignore for changes.
+#
+# By default, Streamlit watches files in the current working directory
+# and its subdirectories. Use this option to specify exceptions within
+# watched directories. Paths can be absolute or relative to the current
+# working directory.
+#
+# Example: ['/home/user1/env', 'relative/path/to/folder']
+#
+# Default: []
+folderWatchBlacklist = []
+
+# Automatically rerun script when the file is modified on disk.
+#
+# Default: false
+runOnSave = true
+
+# The port where the server will listen for browser connections.
+#
+# Default: 8501
+port = 8501
+
+# Max size, in megabytes, for files uploaded with the file_uploader.
+#
+# Default: 200
+maxUploadSize = 200
+
+# Max size, in megabytes, of messages that can be sent via the WebSocket
+# connection.
+#
+# Default: 200
+maxMessageSize = 200
+
+#########################################################################
+#                             Theme                                     #
+#########################################################################
+# Check this out these links for more info:
+# https://docs.streamlit.io/develop/concepts/configuration/theming
+
+# [theme]
+# base = "dark"
+
+# font = "sans-serif"
+# headingFont = "sans-serif"
+# codeFont = "monospace"
+
+# primaryColor = "#1ed760"
+# backgroundColor = "#2a2a2a"
+# secondaryBackgroundColor = "#121212"
+# codeBackgroundColor = "#121212"
+# textColor = "#ffffff"
+# linkColor = "#1ed760"
+# borderColor = "#7c7c7c"
+# showWidgetBorder = true
+# baseRadius = "0.3rem"
+# buttonRadius = "full"
+# chartCategoricalColors = ["#ffc862", "#2d46b9", "#b49bc8"]
+
+# [theme.sidebar]
+# font = "sans-serif"
+# headingFont = "sans-serif"
+# codeFont = "monospace"
+# backgroundColor = "#121212"
+# secondaryBackgroundColor = "#000000"
+# codeBackgroundColor = "#2a2a2a"
+# borderColor = "#696969"
