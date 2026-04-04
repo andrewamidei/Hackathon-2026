@@ -1,7 +1,9 @@
 import streamlit as st
-import pandas as pd
 
-st.title("Hello World test")
-st.title("Hello World test")
-st.title("Hello World test")
+if 'login_code' not in st.session_state:
+    st.session_state.login_code = None
+if 'message_input' not in st.session_state:
+    st.session_state.message_input = ""
+
+st.switch_page("pages/homepage.py")
 
