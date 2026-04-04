@@ -72,7 +72,7 @@ runOnSave = true
 # The port where the server will listen for browser connections.
 #
 # Default: 8501
-port = 8501
+# port is set at runtime via --server.port=$PORT in start.sh
 
 # Max size, in megabytes, for files uploaded with the file_uploader.
 #

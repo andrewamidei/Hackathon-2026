@@ -3,3 +3,7 @@ spotipy
 python-dotenv
 dotenv
 pandas
+fastapi
+uvicorn[standard]
+requests
+streamlit-geolocation
