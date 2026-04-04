@@ -1,4 +1,4 @@
-import secrets
+import random
 import threading
 
 from fastapi import APIRouter, HTTPException, Query
@@ -44,7 +44,7 @@ class VoteRequest(BaseModel):
 
 @router.post("/host/setup")
 def setup_game(req: CreateSessionRequest):
-    session_id = secrets.token_hex(16)
+    session_id = str(random.randint(100000, 999999))
     with _lock:
         _sessions[session_id] = {
             "id": req.id,

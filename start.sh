@@ -2,7 +2,7 @@
 set -e
 
 # Start the FastAPI game API on port 8000 in the background
-uvicorn src.api:app --host 0.0.0.0 --port 8000 &
+PYTHONPATH=src uvicorn src.api:app --host 0.0.0.0 --port 8000 &
 
 # Start Streamlit on the port Railway expects (defaults to 8501 locally)
 streamlit run src/game1.py \

@@ -3,20 +3,22 @@ import time
 
 import requests
 import streamlit as st
+from components.song_input import song_input
 
-API_URL = os.environ.get("API_URL", "http://localhost:8000")
+API_URL = os.environ.get("API_URL", "http://localhost:8001")
 
 st.set_page_config(page_title="DJ_DeathMatch", page_icon="🎮", layout="centered")
 
 # ── Session state defaults ──────────────────────────────────────────────────────
 
 for key, default in {
-    "role": None,           # "host" | "player"
+    "role": None,
     "player_name": None,
     "answered": False,
     "last_q_index": -1,
-    "questions": [],        # host's staged questions before setup
-    "last_answer_result": None,  # {"correct": bool, "points": int}
+    "questions": [],
+    "last_answer_result": None,
+    "session_id": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -55,9 +57,37 @@ def auto_rerun(seconds: float = 2.0):
     st.rerun()
 
 
-if st.session_state.role == "player":
+# Auto-create a session for the host if they don't have one yet
+if st.session_state.role == "host" and st.session_state.session_id is None:
+    r = api_post("/DJ/host/setup", {"location": [], "id": 0, "name": "host"})
+    if r and r.status_code == 200:
+        st.session_state.session_id = r.json()["session_id"]
+    else:
+        st.error("Failed to create game session.")
+        st.stop()
 
-    pass
+
+# ════════════════════════════════════════════════════════════════════════════════
+# PLAYER VIEW
+# ════════════════════════════════════════════════════════════════════════════════
+
+if st.session_state.role == "player":
+    sid = st.session_state.session_id
+    game_state = api_get(f"/DJ/state?session_id={sid}")
+    status = game_state.get("status") if game_state else None
+
+    # ── Init: waiting for host to start ───────────────────────────────────────
+    if status == "init":
+        st.title("⏳ Waiting for the host to start...")
+
+    # ── Pick / Play: waiting ───────────────────────────────────────────────────
+    elif status in ("pick", "play"):
+        st.title("⏳ Waiting...")
+
+    # ── Vote: vote on the current songs ───────────────────────────────────────
+    elif status == "vote":
+        st.title("🗳️ Vote for a Song")
+        pass
 
 
 if st.session_state.role == "DJ":
@@ -67,13 +97,19 @@ if st.session_state.role == "DJ":
 # ════════════════════════════════════════════════════════════════════════════════
 
 if st.session_state.role == "host":
-    state = api_get("/DJ/state")
-    if game["status"] in ("init"):
+    sid = st.session_state.session_id
+    st.sidebar.code(sid, language=None)
+    state = api_get(f"/DJ/status?session_id={sid}")
 
-    pass
+    if state and state.get("status") == "init":
+        st.title("🎵 DJ Deathmatch Setup")
+        song = song_input(label="Add a song to the queue", key="host_song_input")
+        if song:
+            st.success(f"Added: {song}")
 
-if st.session_state.role == "host":
-    game = api_get("/DJ/state")
+if st.session_state.role == "host1":
+    sid = st.session_state.session_id
+    game = api_get(f"/DJ/status?session_id={sid}")
 
     if game is None:
         st.error("Cannot reach the game API. Is it running?")

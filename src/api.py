@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.game_api import DJ
+from game_api import DJ
 
 app = FastAPI(title="QuizGame API")
 
