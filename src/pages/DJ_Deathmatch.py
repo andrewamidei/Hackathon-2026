@@ -4,6 +4,7 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from components.song_input import song_input
+import spotifyHandler as sp_handler
 
 API_URL = os.environ.get("API_URL", "http://localhost:8001")
 
@@ -18,14 +19,18 @@ st.markdown(
 # ── Session state defaults ───────────────────────────────────────────────────────
 
 for key, default in {
-    "role":          None,
-    "session_id":    None,
-    "player_id":     None,
-    "voted":         False,
-    "voted_for":     None,
-    "dj_finalized":  False,
-    "last_dj_ids":   [],
-    "now_playing":   None,   # written by fragment; read by sidebar outside fragment
+    "role":            None,
+    "session_id":      None,
+    "player_id":       None,
+    "voted":           False,
+    "voted_for":       None,
+    "dj_finalized":    False,
+    "last_dj_ids":     [],
+    "now_playing":     None,   # written by fragment; read by sidebar outside fragment
+    # Spotify (token lives in spotifyHandler module, not here)
+    "sp_track_uris":   {},     # {song_label: uri} built as host adds songs
+    "sp_search":       [],     # current search results
+    "sp_last_played":  None,   # song label last sent to Spotify
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -55,6 +60,15 @@ def timer_bar(remaining: int, duration: int, label_open: str, label_closed: str)
     fraction = remaining / duration if duration > 0 else 0
     label    = f"{label_open} {remaining}s" if remaining > 0 else label_closed
     st.progress(fraction, text=label)
+
+
+# Inject the Web Playback SDK once for the host (outside the fragment so the
+# iframe is not re-mounted on every fragment cycle).
+if st.session_state.role == "host" and sp_handler.is_authenticated():
+    try:
+        components.html(sp_handler.player_html(), height=50)
+    except Exception:
+        pass
 
 
 # ── Host session bootstrap ───────────────────────────────────────────────────────
@@ -95,6 +109,17 @@ if st.session_state.role == "player" and st.session_state.player_id is None:
 with st.sidebar:
     if st.session_state.role == "host":
         st.code(st.session_state.session_id or "", language=None)
+        if not sp_handler.is_authenticated():
+            auth_url = sp_handler.get_auth_url(st.session_state.session_id or "")
+            st.markdown(
+                f'<a href="{auth_url}" target="_self">'
+                '<div style="background:#1DB954;color:white;padding:8px;'
+                'text-align:center;border-radius:6px;font-weight:bold;">'
+                'Connect Spotify</div></a>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.caption("Spotify connected")
     if st.session_state.now_playing:
         st.markdown("**Now Playing**")
         st.info(st.session_state.now_playing)
@@ -122,13 +147,43 @@ if st.session_state.role == "host":
         # ── init ─────────────────────────────────────────────────────────────────
         if status == "init":
             st.title("DJ Deathmatch Setup")
-            song = song_input(label="Add a song to the queue", key="host_song_input")
-            if song:
-                r = api_post("/DJ/host/add_song", {"session_id": sid, "song": song})
-                if r and r.status_code == 200:
-                    st.rerun()
-                else:
-                    st.error("Failed to add song.")
+
+            # Spotify search to add songs — falls back to plain text if not connected
+            if sp_handler.is_authenticated():
+                with st.form("sp_search_form", clear_on_submit=True):
+                    query = st.text_input("Search Spotify", placeholder="Artist or song name")
+                    st.form_submit_button("Search")
+                if query and query.strip():
+                    try:
+                        st.session_state.sp_search = sp_handler.search_tracks(query.strip())
+                    except Exception as e:
+                        st.error(f"Search failed: {e}")
+
+                for track in st.session_state.sp_search:
+                    col1, col2 = st.columns([1, 5])
+                    with col1:
+                        if track["album_art"]:
+                            st.image(track["album_art"], width=60)
+                    with col2:
+                        st.write(f"**{track['name']}** — {track['artist']}")
+                        if st.button("Add to queue", key=f"add_{track['id']}"):
+                            label = f"{track['name']} — {track['artist']}"
+                            r = api_post("/DJ/host/add_song", {"session_id": sid, "song": label})
+                            if r and r.status_code == 200:
+                                st.session_state.sp_track_uris[label] = track["uri"]
+                                st.session_state.sp_search = []
+                                st.rerun()
+                            else:
+                                st.error("Failed to add song.")
+            else:
+                st.info("Connect Spotify in the sidebar to search for songs.")
+                song = song_input(label="Or add a song title manually", key="host_song_input")
+                if song:
+                    r = api_post("/DJ/host/add_song", {"session_id": sid, "song": song})
+                    if r and r.status_code == 200:
+                        st.rerun()
+                    else:
+                        st.error("Failed to add song.")
 
             queue = state.get("song_queue", [])
             if queue:
@@ -148,6 +203,20 @@ if st.session_state.role == "host":
             current = state.get("current_song")
             if current:
                 st.subheader(current)
+
+            # Auto-play on Spotify when the song advances
+            if current and current != st.session_state.sp_last_played and sp_handler.is_authenticated():
+                try:
+                    device_id = sp_handler.get_player_device_id()
+                    uri       = st.session_state.sp_track_uris.get(current)
+                    if device_id and uri:
+                        sp_handler.play_track(uri, device_id)
+                        st.session_state.sp_last_played = current
+                    elif not device_id:
+                        st.warning("Spotify player not found — click the page once to wake it up.")
+                except Exception as e:
+                    st.warning(f"Spotify playback error: {e}")
+
             queue = state.get("song_queue", [])
             idx   = state.get("current_song_index", 0)
             st.caption(f"Song {idx + 1} of {len(queue)}")

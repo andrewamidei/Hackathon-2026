@@ -4,10 +4,31 @@ import streamlit as st
 import os
 from streamlit_js_eval import get_geolocation
 from handlers.database import DatabaseManager
+import spotifyHandler as sp_handler
 
 url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
 
 st.set_page_config(page_title="DJ Booth", layout="centered")
+
+# ── Spotify OAuth callback ────────────────────────────────────────────────────────
+# Spotify redirects to the root URL (http://127.0.0.1:8501/?code=...&state=sid=XXX).
+# Intercept it here before any other UI renders, exchange the code, restore
+# session state from the OAuth state param, then send the host back to the game.
+
+if "code" in st.query_params:
+    raw_state = st.query_params.get("state", "")
+    for part in raw_state.split("&"):
+        if part.startswith("sid="):
+            st.session_state.session_id = part.split("=", 1)[1]
+            st.session_state.role       = "host"
+            break
+    try:
+        sp_handler.handle_callback(st.query_params["code"])
+    except Exception as e:
+        st.error(f"Spotify auth failed: {e}")
+        st.stop()
+    st.query_params.clear()
+    st.switch_page("pages/DJ_Deathmatch.py")
 
 dbm = DatabaseManager(url=url)
 

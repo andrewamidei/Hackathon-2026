@@ -1,127 +1,139 @@
-import streamlit as st
-import streamlit.components.v1 as components
+"""
+spotifyHandler.py
+
+Module-level _oauth and _token_info mirror the original working pattern:
+  - _oauth is created once at import time and reused for all calls so that
+    spotipy's disk cache (.cache file) is read and written correctly.
+  - _token_info starts from the cached token (if any) so the host stays
+    logged in across Streamlit reruns and OAuth redirects without needing
+    st.session_state.
+  - UI code lives in DJ_Deathmatch.py; this file has no Streamlit imports.
+"""
+
+from typing import Optional
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-scopeIn = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
-sp_oauth = SpotifyOAuth(scope=scopeIn)
-token_info = sp_oauth.get_cached_token()
-class SpotifyHandler:
+SCOPE = (
+    "streaming "
+    "user-read-email "
+    "user-read-private "
+    "user-read-playback-state "
+    "user-modify-playback-state"
+)
 
-    def search_spotify_player():
-        global token_info 
-        
-        if "code" in st.query_params:
-            auth_code = st.query_params["code"]
-            token_info = sp_oauth.get_access_token(auth_code)
-            st.query_params.clear() # Clean the URL
-            st.rerun()
+PLAYER_NAME = "DJ Deathmatch Player"
 
-        if not token_info:
-            st.title("Spotify Streamlit Player")
-            auth_url = sp_oauth.get_authorize_url()
-            st.info("Please Authenticate with Spotify to continue.")
-            st.markdown(f'<a href="{auth_url}" target="_self" style="text-decoration: none;"><div style="background-color: #1DB954; color: white; padding: 10px; text-align: center; border-radius: 25px; font-weight: bold;">Authenticate with Spotify</div></a>', unsafe_allow_html=True)
-            st.stop() # Halt execution until they log in'
-        else:
-            st.title("Spotify Streamlit Player")
-            st.info("Logged into Spotify!")
-
-        access_token = token_info['access_token']
-        sp = spotipy.Spotify(auth=access_token)
+# Module-level — created once per worker process, survives Streamlit reruns.
+_oauth      = SpotifyOAuth(scope=SCOPE)
+_token_info = _oauth.get_cached_token()   # None if no cache yet; populated after auth
 
 
-        search_query = st.text_input("Enter a song or artist name:")
-        
-        if search_query:
-            results = sp.search(q=search_query, limit=5, type='track')
-            tracks = results['tracks']['items']
-                
-            for track in tracks:
-                track_name = track['name']
-                artist_name = track['artists'][0]['name'] if track['artists'] else "Unknown Artist"
-                album_url = track['album']['images'][0]['url'] if track['album']['images'] else None
+# ── Auth ──────────────────────────────────────────────────────────────────────────
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.image(album_url, width=100)
-                with col2:
-                    st.write(f"**{track_name}** by {artist_name}")
-                    if st.button("▶️ Select Music", key=track['id']): 
-                        st.session_state.selected_track = track
-                        st.session_state.selected_sp = sp
-                        st.rerun()
+def get_auth_url(session_id: str) -> str:
+    """Return the Spotify authorization URL.
+    session_id is encoded in the OAuth state param so the page can restore
+    the host's game session after the browser redirect wipes st.session_state."""
+    return _oauth.get_authorize_url(state=f"sid={session_id}")
 
-    def render_spotify_player(selected_track,sp):
 
-        devices = sp.devices()
-        target_device_id = None
-        
-        for device in devices.get('devices', []):
-            if device['name'] == 'Streamlit Web Player':
-                target_device_id = device['id']
-                break
-        
-        if target_device_id:
-            sp.pause_playback(device_id=target_device_id) 
-        
-        if token_info:
-            access_token = token_info['access_token']
-            
-            # --- THE JS SDK ENGINE (The "Speaker") ---
-            # This MUST be rendered so the browser creates the device
-            player_html = f"""
-            <script src="https://sdk.scdn.co/spotify-player.js"></script>
-            <script>
-                window.onSpotifyWebPlaybackSDKReady = () => {{
-                    const player = new Spotify.Player({{
-                        name: 'Streamlit Web Player',
-                        getOAuthToken: cb => {{ cb('{access_token}'); }},
-                        volume: 0.5
-                    }});
-                    player.addListener('ready', ({{ device_id }}) => {{
-                        console.log('Connected with Device ID', device_id);
-                    }});
-                    player.connect();
-                }};
-            </script>
-            <div style="background: #191414; color: #1DB954; padding: 10px; text-align: center; border-radius: 5px;">
-                🎧 Web Player Active (Click page to enable audio)
-            </div>
-            """
-            components.html(player_html, height=60)
+def handle_callback(code: str) -> None:
+    """Exchange the OAuth code for a token and cache it.
+    Call this when ?code= appears in st.query_params."""
+    global _token_info
+    _token_info = _oauth.get_access_token(code, as_dict=True)
 
-            track_name = selected_track['name']
-            artist_name = selected_track['artists'][0]['name'] if selected_track['artists'] else "Unknown"
-            track_uri = selected_track['uri']
 
-            st.subheader("Now Playing")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write(f"### {track_name}")
-                st.write(f"**Artist:** {artist_name}")
-            
-            with col2:
-                if st.button("🚀 Start Playback", key="play_button_final"):
-                    try:
-                        # Now sp.devices() will actually see the 'Streamlit Web Player'
-                        devices = sp.devices()
-                        target_device_id = None
-                        
-                        for device in devices.get('devices', []):
-                            if device['name'] == 'Streamlit Web Player':
-                                target_device_id = device['id']
-                                break
-                        
-                        if target_device_id:
-                            sp.start_playback(device_id=target_device_id, uris=[track_uri])
-                            st.toast(f"🎶 Playing {track_name}!")
-                        else:
-                            st.error("Player not found. Did you click the page to 'wake up' the browser audio?")
-                    
-                    except Exception as e:
-                        st.error(f"Playback Error: {e}")
-        else:
-            st.warning("Please authenticate with Spotify.")
+def is_authenticated() -> bool:
+    return _token_info is not None
 
+
+def get_client() -> spotipy.Spotify:
+    """Return a ready Spotify client, refreshing the token if needed."""
+    global _token_info
+    if _token_info is None:
+        raise RuntimeError("Not authenticated — call handle_callback first")
+    if _oauth.is_token_expired(_token_info):
+        _token_info = _oauth.refresh_access_token(_token_info["refresh_token"])
+    return spotipy.Spotify(auth=_token_info["access_token"])
+
+
+def get_access_token() -> str:
+    """Return the current access token (refreshing if needed). Used to boot the SDK."""
+    get_client()   # ensures token is fresh and _token_info is updated
+    return _token_info["access_token"]
+
+
+# ── Search & playback ─────────────────────────────────────────────────────────────
+
+def search_tracks(query: str, limit: int = 5) -> list[dict]:
+    """Search Spotify. Returns simplified dicts: {id, uri, name, artist, album_art}."""
+    sp      = get_client()
+    results = sp.search(q=query, limit=limit, type="track")
+    tracks  = []
+    for t in results["tracks"]["items"]:
+        tracks.append({
+            "id":        t["id"],
+            "uri":       t["uri"],
+            "name":      t["name"],
+            "artist":    t["artists"][0]["name"] if t["artists"] else "Unknown",
+            "album_art": t["album"]["images"][0]["url"] if t["album"]["images"] else None,
+        })
+    return tracks
+
+
+def get_player_device_id() -> Optional[str]:
+    """Find the DJ Deathmatch web player in the user's active device list."""
+    sp = get_client()
+    for device in sp.devices().get("devices", []):
+        if device["name"] == PLAYER_NAME:
+            return device["id"]
+    return None
+
+
+def play_track(track_uri: str, device_id: str) -> bool:
+    """Start playback of track_uri on device_id. Returns True on success."""
+    try:
+        get_client().start_playback(device_id=device_id, uris=[track_uri])
+        return True
+    except Exception:
+        return False
+
+
+def pause(device_id: str) -> bool:
+    """Pause playback. Returns True on success."""
+    try:
+        get_client().pause_playback(device_id=device_id)
+        return True
+    except Exception:
+        return False
+
+
+def player_html() -> str:
+    """HTML/JS that boots the Spotify Web Playback SDK in the browser.
+    Inject once per host page load via st.components.v1.html(..., height=50)."""
+    token = get_access_token()
+    return f"""
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <script>
+        window.onSpotifyWebPlaybackSDKReady = () => {{
+            const player = new Spotify.Player({{
+                name: '{PLAYER_NAME}',
+                getOAuthToken: cb => {{ cb('{token}'); }},
+                volume: 0.8
+            }});
+            player.addListener('ready', ({{ device_id }}) => {{
+                console.log('[DJ Deathmatch] Spotify ready, device_id:', device_id);
+            }});
+            player.addListener('not_ready', ({{ device_id }}) => {{
+                console.warn('[DJ Deathmatch] Spotify offline, device_id:', device_id);
+            }});
+            player.connect();
+        }};
+    </script>
+    <div style="background:#191414;color:#1DB954;padding:8px 12px;
+                border-radius:6px;font-size:13px;text-align:center;">
+        DJ Deathmatch Player — click page once to enable audio
+    </div>
+    """
