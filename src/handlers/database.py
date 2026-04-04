@@ -7,10 +7,8 @@ from typing import Optional, Tuple, Union
 
 
 class DatabaseManager:
-
     def __init__(self, url=None):
-        if (len(url) < 1):
-
+        if (url is None):
             self.url = "postgresql+psycopg://myuser:mypassword@localhost:5432/mydatabase"
         else:
             self.url = url

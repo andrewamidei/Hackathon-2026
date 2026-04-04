@@ -10,3 +10,6 @@ sqlalchemy
 pandas
 geopy
 psycopg[binary]
+streamlit_geolocation
+streamlit_bokeh_events
+streamlit_js_eval
