@@ -8,7 +8,7 @@ import spotifyHandler as sp_handler
 
 url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
 
-st.set_page_config(page_title="DJ Booth", layout="centered")
+st.set_page_config(page_title="Tune Zone", page_icon="🎮", layout="centered")
 
 # ── Spotify OAuth callback ────────────────────────────────────────────────────────
 # Spotify redirects to the root URL (http://127.0.0.1:8501/?code=...&state=sid=XXX).
@@ -72,6 +72,8 @@ if 'selected_track' not in st.session_state:
     st.session_state.selected_track = None
 if 'selected_sp' not in st.session_state:
     st.session_state.selected_sp = None
+if 'u_name' not in st.session_state:
+    st.session_state.u_name = None
 
 # # --- LOCATION DIALOG ---
 # @st.dialog("Sync Location")
@@ -168,6 +170,7 @@ with st.container(border=True):
     l_code = st.text_input("Lobby Code", max_chars=6)
     if st.button("Join Game", use_container_width=True, type="primary"):
         if len(l_code) == 6:
+            st.session_state.u_name = u_name
             st.session_state.update({"login_code": l_code, "role": "player"})
             st.switch_page("pages/DJ_Deathmatch.py")
         else:
