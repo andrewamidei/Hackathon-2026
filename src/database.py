@@ -29,7 +29,7 @@ class DatabaseManager:
             self.url = "postgresql+psycopg://myuser:mypassword@localhost:5432/mydatabase"
             self.engine = create_engine(self.url)  # You'll likely want to retry the connection here
 
-    def save_data(self, entry: Tuple[str, Optional[Tuple[float, float]]], table_name: str = "sessions"):
+    def add_host(self, entry: Tuple[str, Optional[Tuple[float, float]]], table_name: str = "sessions"):
         """
         Saves or updates a session.
         entry example: ("session_123", (40.7, -74.0)) or ("session_123", None)
@@ -66,13 +66,14 @@ class DatabaseManager:
             print(f"Error saving session data to {table_name}: {e}")
 
     def query_to_df(self, sql_query: str):
-        """Runs a SELECT query and returns a DataFrame."""
+        """Runs a SELECT query and returns a DataFrame using an explicit connection."""
         try:
-            return pd.read_sql(sql_query, self.engine)
+            # 'connect()' creates a context manager that closes the connection automatically
+            with self.engine.connect() as conn:
+                return pd.read_sql(sql_query, conn)
         except Exception as e:
             print(f"Error reading data: {e}")
             return pd.DataFrame()
-    # DO NOT USE
 
     def query_nearest(self, location: tuple[float, float], n: int = 5) -> list[str]:
         """
@@ -134,25 +135,40 @@ class DatabaseManager:
 
         return distance <= radius_meters
 
+    # ... (init and other methods)
+
     def remove_session(self, session_id: str):
         """
-        Deletes a session from the database based on its unique ID.
+        Deletes a session from the database and then closes the connection pool.
         """
-        # Use a parameterized query to prevent SQL injection
         sql = text("DELETE FROM sessions WHERE session_id = :session_id")
 
         try:
+
+            # Use 'begin' to handle the transaction for the delete
             with self.engine.begin() as conn:
                 result = conn.execute(sql, {"session_id": session_id})
-
-                # Optional: Check if a row was actually deleted
+                self.close_connection()
                 if result.rowcount > 0:
                     print(f"Successfully removed session: {session_id}")
                 else:
                     print(f"No session found with ID: {session_id}")
 
+            # Call the closing logic immediately after the transaction finishes
+
         except Exception as e:
-            print(f"Error removing session {session_id}: {e}")
+            print(f"Error during remove_session for {session_id}: {e}")
+            # Still attempt to close if an error occurs to prevent hanging connections
+
+    def close_connection(self):
+        """
+        Disposes of the engine and clears the connection pool.
+        """
+        try:
+            self.engine.dispose()
+            print("Database connection pool disposed.")
+        except Exception as e:
+            print(f"Error disposing engine: {e}")
 
 
 # --- Example Usage ---

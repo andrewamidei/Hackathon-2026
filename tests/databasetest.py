@@ -36,6 +36,14 @@ class TestYourModule(unittest.TestCase):
         # Clean the table before every test to ensure isolation
         self.dbm.execute_raw("DELETE FROM sessions")
 
+    def tearDown(self):
+        """
+        Runs after EVERY test method.
+        This ensures the connection is closed properly even if a test fails.
+        """
+        if hasattr(self, 'dbm'):
+            self.dbm.close_connection()
+
     def test_radius_logic(self):
         """Tests the mathematical distance calculation."""
         # SF and NYC are thousands of km apart
@@ -49,15 +57,15 @@ class TestYourModule(unittest.TestCase):
     def test_session_lifecycle(self):
         """Tests Save, Null Update, and Remove."""
         session_id = "test_user_123"
-
+        print("testing session lifecycle")
         # 1. Save initial location
-        self.dbm.save_data((session_id, self.coordinates[0]))
+        self.dbm.add_host((session_id, self.coordinates[0]))
         df = self.dbm.query_to_df(f"SELECT * FROM sessions WHERE session_id='{session_id}'")
         self.assertEqual(len(df), 1)
         self.assertEqual(df.iloc[0]['latitude'], self.coordinates[0][0])
 
         # 2. Update to NULL (User hides location)
-        self.dbm.save_data((session_id, None))
+        self.dbm.add_host((session_id, None))
         df_null = self.dbm.query_to_df(f"SELECT * FROM sessions WHERE session_id='{session_id}'")
         self.assertTrue(pd.isna(df_null.iloc[0]['latitude']))
 
@@ -67,11 +75,12 @@ class TestYourModule(unittest.TestCase):
         self.assertTrue(df_empty.empty)
 
     def test_query_nearest(self):
+        print("testing query nearest")
         """Tests the N-nearest neighbor sorting logic."""
         # Insert 3 points: NYC, Staten Island (Close), and Paris (Far)
-        self.dbm.save_data(("nyc", self.coordinates[0]))
-        self.dbm.save_data(("staten_island", self.coordinates[2]))
-        self.dbm.save_data(("paris", self.coordinates[3]))
+        self.dbm.add_host(("nyc", self.coordinates[0]))
+        self.dbm.add_host(("staten_island", self.coordinates[2]))
+        self.dbm.add_host(("paris", self.coordinates[3]))
 
         # Query from NYC point
         nearest = self.dbm.query_nearest(self.coordinates[0], n=2)
@@ -84,4 +93,8 @@ class TestYourModule(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+
+
 
