@@ -44,28 +44,32 @@ class DatabaseManager:
             conn.execute(text(sql_command))
             print("Command executed successfully.")
 
-    def is_within_radius(self, latlon1, latlon2, radius: float):
+    def is_within_radius(self, latlon1: tuple, latlon2: tuple, radius_meters: float) -> bool:
         """
-        Check if two latitude-longitude points are within a specified radius of each other.
+        Determines if two points are within a specific distance in meters.
+
         Args:
-        latlon1 (tuple): Latitude and longitude as a tuple, e.g., (latitude1, longitude1)
-        latlon2 (tuple): Latitude and longitude as a tuple, e.g., (latitude2, longitude2)
-        radius (float): Radius in kilometers
+            latlon1 (tuple): (latitude, longitude)
+            latlon2 (tuple): (latitude, longitude)
+            radius_meters (float): The maximum allowed distance in meters.
 
         Returns:
-        bool: True if the points are within the radius, False otherwise
+            bool: True if distance <= radius_meters, False otherwise.
         """
-        # Ensure inputs are valid latitude-longitude tuples
+        # Validate inputs
         if not isinstance(latlon1, tuple) or len(latlon1) != 2:
-            raise ValueError("Invalid latitude-longitude tuple for latlon1")
+            raise ValueError(f"latlon1 must be a (lat, lon) tuple, got {latlon1}")
         if not isinstance(latlon2, tuple) or len(latlon2) != 2:
-            raise ValueError("Invalid latitude-longitude tuple for latlon2")
+            raise ValueError(f"latlon2 must be a (lat, lon) tuple, got {latlon2}")
 
-        # Calculate the distance between the two points using the Haversine formula
+        if radius_meters < 0:
+            raise ValueError("Radius cannot be negative.")
+
+        # Calculate distance in meters
+        # geodesic uses the WGS-84 ellipsoid (very accurate)
         distance = geodesic(latlon1, latlon2).meters
 
-        # Return True if the distance is within the radius, False otherwise
-        return distance <= radius
+        return distance <= radius_meters
 
 
 # --- Example Usage ---
