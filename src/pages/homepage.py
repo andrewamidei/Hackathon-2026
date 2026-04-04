@@ -130,7 +130,7 @@ if st.button("Host Lobby", use_container_width=True, type="primary", disabled=no
             "lat": val_lat,
             "lon": val_lon,
         })
-        st.switch_page("pages/init.py")
+        st.switch_page("pages/DJ_Deathmatch.py")
     except Exception as e:
         st.error(f"❌ DB Error: {e}")
 
@@ -145,6 +145,6 @@ with st.container(border=True):
     if st.button("Join Game", use_container_width=True):
         if len(l_code) == 6:
             st.session_state.update({"login_code": l_code, "role": "player"})
-            st.switch_page("pages/init.py")
+            st.switch_page("pages/DJ_Deathmatch.py")
         else:
             st.warning("Please enter a valid 6-character lobby code.")
