@@ -76,13 +76,43 @@ if st.button("Host Lobby", use_container_width=True):
     st.session_state.role = "host"
     st.switch_page("pages/init.py")
 
+can_host = st.session_state.lat is not None and st.session_state.lon is not None
+
+if st.button("Host Lobby", use_container_width=True, type="primary", disabled=not can_host):
+    val_lat = st.session_state.lat
+    val_lon = st.session_state.lon
+
+    # Absolute last-line defense — never write NULLs to the DB
+    if val_lat is None or val_lon is None:
+        st.error("❌ No coordinates. Please sync GPS first.")
+        st.stop()
+
+    lobby_id = gen_code()
+
+    try:
+        dbm.add_host(entry=(lobby_id, (val_lat, val_lon)), table_name="sessions")
+        st.session_state.update({
+            "role": "host",
+            "lobby_code": lobby_id,
+            "lat": val_lat,
+            "lon": val_lon,
+        })
+        st.switch_page("pages/DJ_Deathmatch.py")
+    except Exception as e:
+        st.error(f"❌ DB Error: {e}")
+
+if not can_host:
+    st.info("Please 'Begin Setup' to enable hosting.")
+
+
+# --- JOIN SECTION ---
 with st.container(border=True):
     st.markdown("### Join Lobby")
     player_name = st.text_input("Your Name", value=st.session_state.get("dj_name", "Enter Name"))
     lobby_code = st.text_input("Lobby Code", max_chars=6)
     if st.button("Join Game", use_container_width=True):
-        if len(lobby_code) == 6:
-            st.session_state.update({"login_code": lobby_code, "player_name": player_name, "role": "player"})
+        if len(l_code) == 6:
+            st.session_state.update({"login_code": l_code, "role": "player"})
             st.switch_page("pages/DJ_Deathmatch.py")
         else:
             st.error("Code must be 6 chars.")
