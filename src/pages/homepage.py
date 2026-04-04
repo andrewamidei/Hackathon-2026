@@ -3,6 +3,7 @@ import streamlit as st
 from components.assets_manager import set_png_as_page_bg, BACKGROUND_IMAGE
 
 # set_png_as_page_bg(BACKGROUND_IMAGE)
+
 from streamlit_js_eval import get_geolocation
 
 # 1. MUST BE FIRST

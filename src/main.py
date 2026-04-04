@@ -8,6 +8,8 @@ if 'role' not in st.session_state:
     st.session_state.role = None
 if 'player_name' not in st.session_state:
     st.session_state.player_name = None
+if 'session_id' not in st.session_state:
+    st.session_state.session_id
 
 # if 'message_input' not in st.session_state:
 #     st.session_state.message_input = ""
