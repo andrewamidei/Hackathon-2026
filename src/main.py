@@ -1,11 +1,15 @@
 import random
 import string
 import streamlit as st
+import os
 from streamlit_js_eval import get_geolocation
 from handlers.database import DatabaseManager
 
+url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
+
 st.set_page_config(page_title="DJ Booth", layout="centered")
-dbm = DatabaseManager()
+
+dbm = DatabaseManager(url=url)
 
 # if 'message_input' not in st.session_state:
 #     st.session_state.message_input = ""
@@ -32,10 +36,10 @@ for key, default in {
 
 st.title("🎧 DJ Booth")
 
-    if 'selected_track' not in st.session_state:
-        st.session_state.selected_track = None
-    if 'selected_sp' not in st.session_state:
-        st.session_state.selected_sp = None
+if 'selected_track' not in st.session_state:
+    st.session_state.selected_track = None
+if 'selected_sp' not in st.session_state:
+    st.session_state.selected_sp = None
 
 # --- LOCATION DIALOG ---
 @st.dialog("Sync Location")
@@ -112,7 +116,7 @@ if st.button("Host Lobby", use_container_width=True, type="primary", disabled=no
             "lat": val_lat,
             "lon": val_lon,
         })
-        st.switch_page("pages/DJ_Deathmatch.py")
+        st.switch_page("pages/init.py")
     except Exception as e:
         st.error(f"❌ DB Error: {e}")
 
@@ -127,6 +131,6 @@ with st.container(border=True):
     if st.button("Join Game", use_container_width=True):
         if len(l_code) == 6:
             st.session_state.update({"login_code": l_code, "role": "player"})
-            st.switch_page("pages/DJ_Deathmatch.py")
+            st.switch_page("pages/init.py")
         else:
             st.warning("Please enter a valid 6-character lobby code.")
