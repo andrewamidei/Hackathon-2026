@@ -15,7 +15,6 @@ def main():
     st.title("Spotify Player")
     if st.session_state.selected_track:
         render_spotify_player(st.session_state.selected_track)
-        pass
     
 if __name__ == "__main__":
     main()
