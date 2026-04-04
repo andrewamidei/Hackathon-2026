@@ -4,13 +4,13 @@ import threading
 import time
 
 from fastapi import APIRouter, HTTPException, Query
-from handlers.database import DatabaseManager
+# from handlers.database import DatabaseManager
 from pydantic import BaseModel
 import spotifyHandler as sp_handler
 
-url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
+# url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
 router = APIRouter(prefix="/DJ", tags=["DJ"])
-db_manager = DatabaseManager(url=url)
+# db_manager = DatabaseManager(url=url)
 
 _lock = threading.Lock()
 _sessions: dict = {}
@@ -122,7 +122,8 @@ def _play_song(session_id: str) -> None:
         if not q:
             return
         idx     = session["current_song_index"]
-        is_last = sp_handler.get_queue_size() <= 1
+        is_last = True
+
 
         if is_last:
             player_ids = list(session["players"].keys())
@@ -254,7 +255,7 @@ def setup_game(req: CreateSessionRequest):
             "vote_deadline":      None,
             "next_player_id":     1,
         }
-        db_manager.add_host((session_id, req.location if req.location else None))
+        # db_manager.add_host((session_id, req.location if req.location else None))
     return {"ok": True, "session_id": session_id}
 
 

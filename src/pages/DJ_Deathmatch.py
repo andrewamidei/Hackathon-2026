@@ -164,8 +164,6 @@ if st.session_state.role == "host":
 
             queue = state.get("song_queue", [])
             idx   = state.get("current_song_index", 0)
-            st.caption(f"Song 1 of {sp_handler.get_queue_size()}")
-            st.info("DJs are selected when the last song starts playing.")
 
         # ── init ─────────────────────────────────────────────────────────────────
         if status == "init":

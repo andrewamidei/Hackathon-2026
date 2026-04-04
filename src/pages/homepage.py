@@ -3,11 +3,11 @@ import random
 import string
 import streamlit as st
 from streamlit_js_eval import streamlit_js_eval
-from handlers.database import DatabaseManager
+# from handlers.database import DatabaseManager
 
 
 st.set_page_config(page_title="DJ Booth", layout="centered")
-dbm = DatabaseManager()
+# dbm = DatabaseManager()
 
 # --- DJ Logic ---
 
@@ -129,19 +129,17 @@ for key, default in {
     lobby_id = gen_code()
 
     try:
-        dbm.add_host(entry=(lobby_id, (val_lat, val_lon)), table_name="sessions")
+        dbm.add_host(entry=(lobby_id, (0, 0)), table_name="sessions")
         st.session_state.update({
             "role": "host",
             "lobby_code": lobby_id,
-            "lat": val_lat,
-            "lon": val_lon,
+            "lat": 0,
+            "lon": 0,
         })
         st.switch_page("pages/DJ_Deathmatch.py")
     except Exception as e:
         st.error(f"❌ DB Error: {e}")
 
-if not can_host:
-    st.info("Please 'Begin Setup' to enable hosting.")
 
 
 # --- JOIN SECTION ---

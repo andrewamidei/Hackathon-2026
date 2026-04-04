@@ -4,7 +4,7 @@ import streamlit as st
 import os
 from pathlib import Path
 from streamlit_js_eval import get_geolocation
-from handlers.database import DatabaseManager
+# from handlers.database import DatabaseManager
 import spotifyHandler as sp_handler
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -35,7 +35,7 @@ if "code" in st.query_params:
     st.query_params.clear()
     st.switch_page("pages/DJ_Deathmatch.py")
 
-dbm = DatabaseManager(url=url)
+# dbm = DatabaseManager(url=url)
 
 # if 'message_input' not in st.session_state:
 #     st.session_state.message_input = ""
@@ -169,7 +169,7 @@ if st.button("Host Lobby", use_container_width=True, type="primary"):#, disabled
 # --- JOIN SECTION ---
 with st.container(border=True):
     st.markdown("### Join Lobby")
-    u_name = st.text_input("Username", random_u_name(), max_chars=6)
+    u_name = st.text_input("Username", random_u_name(), max_chars=15)
     l_code = st.text_input("Lobby Code", max_chars=6)
     if st.button("Join Game", use_container_width=True, type="primary"):
         if len(l_code) == 6:
