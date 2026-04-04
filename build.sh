@@ -2,5 +2,6 @@
 
 set -e
 
-docker build -t my-streamlit-app .
+# lol
+docker build --network=host -t your-image-name .
 
