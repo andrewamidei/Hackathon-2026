@@ -195,7 +195,7 @@ if st.session_state.role == "host":
                             if r and r.status_code == 200:
                                 st.session_state.sp_track_uris[label] = track["uri"]
                                 st.session_state.sp_search = []
-                                st.rerun()
+                                api_get.clear()
                             else:
                                 st.error("Failed to add song.")
                 
@@ -208,7 +208,7 @@ if st.session_state.role == "host":
                 if song:
                     r = api_post("/DJ/host/add_song", {"session_id": sid, "song": song})
                     if r and r.status_code == 200:
-                        st.rerun()
+                        api_get.clear()
                     else:
                         st.error("Failed to add song.")
 
@@ -278,7 +278,7 @@ if st.session_state.role == "host":
             if st.button("End Voting Early", use_container_width=True):
                 r = api_post(f"/DJ/host/next_round?session_id={sid}")
                 if r and r.status_code == 200:
-                    st.rerun()
+                    api_get.clear()
                 else:
                     st.error("Failed to start next round.")
 
@@ -377,7 +377,7 @@ elif st.session_state.role == "player":
                             "song":       song.strip(),
                         })
                         if r and r.status_code == 200:
-                            st.rerun()
+                            api_get.clear()
                         else:
                             st.error("Failed to add song. Try again.")
                 else:
@@ -395,7 +395,7 @@ elif st.session_state.role == "player":
                         })
                         if r and r.status_code == 200:
                             st.session_state.dj_finalized = True
-                            st.rerun()
+                            api_get.clear()
                         else:
                             st.error("Failed to finalize. Try again.")
 
@@ -455,7 +455,7 @@ elif st.session_state.role == "player":
                             if r and r.status_code == 200:
                                 st.session_state.voted     = True
                                 st.session_state.voted_for = opt["name"]
-                                st.rerun()
+                                api_get.clear()
 
             else:   # already voted
                 st.title("Vote Submitted!")
