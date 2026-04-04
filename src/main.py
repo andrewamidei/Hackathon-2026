@@ -8,11 +8,13 @@ if 'role' not in st.session_state:
     st.session_state.role = None
 if 'player_name' not in st.session_state:
     st.session_state.player_name = None
-if 'session_id' not in st.session_state:
-    st.session_state.session_id
 
-# if 'message_input' not in st.session_state:
-#     st.session_state.message_input = ""
+## Spotify
+if 'selected_track' not in st.session_state:
+        st.session_state.selected_track = None
+if 'selected_sp' not in st.session_state:
+    st.session_state.selected_sp = None
+
 
 st.switch_page("pages/homepage.py")
 
@@ -21,12 +23,6 @@ st.switch_page("pages/homepage.py")
 
 
 def main():
-
-    if 'selected_track' not in st.session_state:
-        st.session_state.selected_track = None
-    if 'selected_sp' not in st.session_state:
-        st.session_state.selected_sp = None
-
     SpotifyHandler.search_spotify_player()
     st.title("Spotify Player")
     if st.session_state.selected_track:

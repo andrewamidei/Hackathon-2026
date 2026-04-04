@@ -1,36 +1,29 @@
 import random
 import streamlit as st
-from components.assets_manager import set_png_as_page_bg, BACKGROUND_IMAGE
-
-# set_png_as_page_bg(BACKGROUND_IMAGE)
-
+# from components.assets_manager import set_png_as_page_bg, BACKGROUND_IMAGE
 from streamlit_js_eval import get_geolocation
 
-# 1. MUST BE FIRST
 st.set_page_config(page_title="Get Started", page_icon="🎵", layout="centered")
 
 # --- DJ Logic ---
-
-
 def random_name():
     adj = ["Funky", "Groovy", "Blazing", "Cosmic", "Neon"]
     noun = ["DJ", "Beat", "Drop", "Vibe", "Wave"]
     return f"{random.choice(adj)}{random.choice(noun)}{random.randint(10, 99)}"
 
 
-# 2. SESSION STATE INITIALIZATION
+# GPS Session State
 if 'loc_requested' not in st.session_state:
     st.session_state.loc_requested = False
 if 'final_coords' not in st.session_state:
     st.session_state.final_coords = None
-if 'manual_mode' not in st.session_state:
-    st.session_state.manual_mode = False
-
-st.title("🎧 DJ Booth")
-
-# 3. THE DIALOG (Standard Popup)
 
 
+# set_png_as_page_bg(BACKGROUND_IMAGE)
+
+st.title("Tune Zone")
+
+# THE DIALOG (Standard Popup)
 @st.dialog("Sync Location")
 def location_dialog():
     st.write("Establish satellite uplink to find your local vibe.")
@@ -38,11 +31,6 @@ def location_dialog():
     if st.button("🛰️ Sync GPS", use_container_width=True, type="primary"):
         st.session_state.loc_requested = True
         st.rerun()
-
-    if st.button("⌨️ Manual Entry", use_container_width=True):
-        st.session_state.manual_mode = True
-        st.rerun()
-
 
 # 4. THE CAPTURE LOGIC (The "Fix")
 # If the user clicked 'Sync GPS', we run this block until we get data
@@ -61,7 +49,7 @@ if st.session_state.loc_requested and st.session_state.final_coords is None:
         # but if it hangs, the user just needs to wait a second.
 
 # 5. MAIN UI LOGIC
-if not st.session_state.final_coords and not st.session_state.manual_mode:
+if not st.session_state.final_coords:
     if st.button("Begin Setup", use_container_width=True, type="primary"):
         location_dialog()
 
@@ -81,19 +69,9 @@ if st.session_state.final_coords:
             st.session_state.final_coords = None
             st.rerun()
 
-# Case B: Manual Entry
-if st.session_state.manual_mode and not st.session_state.final_coords:
-    st.warning("GPS Bypassed.")
-    loc_code = st.text_input("Enter Location Code")
-    if loc_code:
-        st.success(f"Location set: {loc_code}")
-        if "dj_name" not in st.session_state:
-            st.session_state.dj_name = random_name()
-
 st.divider()
 
 # --- LOBBY CODE ---
-st.title("Tune Zone")
 if st.button("Host Lobby", use_container_width=True):
     st.session_state.role = "host"
     st.switch_page("pages/init.py")
