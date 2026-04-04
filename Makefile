@@ -13,8 +13,7 @@ PWD = $(shell pwd)
 TARGET_DIR ?= $(PWD)
 
 run:
-	docker run --network=host -t dug
-
+	docker run --network=host -p 8501:8501 dug 
 
 clean:
 	docker prune
