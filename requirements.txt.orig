@@ -6,7 +6,11 @@ pandas
 fastapi
 uvicorn[standard]
 requests
+<<<<<<< HEAD
+streamlit-geolocation
+=======
 sqlalchemy
 pandas
 geopy
 psycopg[binary]
+>>>>>>> ece459571d59d792d09bc5c6d03ef1d8d0ac7fdb

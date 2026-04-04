@@ -1,9 +1,8 @@
-.PHONY: run stop clean
+.PHONY: run stop clean test testhard
 
 run: stop
 	@echo "Building and starting the app..."
-	docker compose up --build -d
-	@echo "App is running at http://localhost:8501"
+	docker compose up --build
 
 stop:
 	@echo "Cleaning up old containers..."
@@ -12,3 +11,10 @@ stop:
 clean: stop
 	@echo "Nuking all project containers and networks..."
 	docker compose down -v
+
+testhard:
+	@echo "installing libs and Starting unit test..."
+	docker compose build --no-cache tester && docker compose run --rm tester
+test:
+	@echo "Starting unit test..."
+	docker compose run --rm tester

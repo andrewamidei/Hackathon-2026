@@ -1,8 +1,12 @@
 services:
   web:
+<<<<<<< HEAD
+    build: .
+=======
     build:
       context: .
       network: host # Fixed: 'network' inside build is different than service network
+>>>>>>> ece459571d59d792d09bc5c6d03ef1d8d0ac7fdb
     container_name: dug 
     ports:
       - "8501:8501"
@@ -13,7 +17,14 @@ services:
     env_file:
       - .env
     volumes:
-      - .:/app      # THIS IS THE MAGIC LINE FOR LIVE RELOAD
+<<<<<<< HEAD
+      - .:/app
+    working_dir: /app
+    # Pointing to src/main.py as per your previous command
+    command: streamlit run src/main.py --server.address=0.0.0.0 --server.port=8501
+=======
+      - .:/app       
+>>>>>>> ece459571d59d792d09bc5c6d03ef1d8d0ac7fdb
     restart: unless-stopped
 
   db:
