@@ -15,6 +15,7 @@ _lock = threading.Lock()
 _sessions: dict = {}
 
 SONG_DURATION = 10   # seconds per song
+PICK_DURATION = 60   # seconds DJs have to submit songs
 VOTE_DURATION = 30   # seconds for the vote window
 MAX_DJ_SONGS  = 3
 
@@ -73,13 +74,14 @@ def _transition_to_next_round(session: dict) -> None:
     if winner_pid is not None and session["dj_picks"].get(winner_pid):
         new_queue = list(session["dj_picks"][winner_pid])
     else:
-        new_queue = list(session["song_queue"])   # replay current queue as fallback
+        new_queue = list(session["song_queue"])
 
     session["song_queue"]         = new_queue
     session["current_song_index"] = 0
     session["dj_player_ids"]      = []
     session["dj_picks"]           = {}
     session["dj_finalized"]       = []
+    session["pick_deadline"]      = None
     session["vote_deadline"]      = None
     session["status"]             = "play"
     for p in session["players"].values():
@@ -91,17 +93,16 @@ def _start_vote(session: dict) -> float:
     Caller must hold _lock. Returns deadline so caller can start _vote_timer."""
     deadline                 = time.time() + VOTE_DURATION
     session["vote_deadline"] = deadline
+    session["pick_deadline"] = None
     session["status"]        = "vote"
     return deadline
 
 
 # ── Background threads ────────────────────────────────────────────────────────────
-# _play_song defined first so _vote_timer can reference it.
 
 def _play_song(session_id: str) -> None:
-    """Runs when a song begins.
-    On the last song: DJs are selected immediately (while the song still plays)
-    so picking can start in parallel with the final track."""
+    """Runs when a song begins. On the last song, DJs are selected immediately
+    and the pick timer starts so picking runs in parallel with the final track."""
     is_last = False
 
     with _lock:
@@ -121,8 +122,18 @@ def _play_song(session_id: str) -> None:
                 session["dj_player_ids"] = chosen
                 session["dj_picks"]      = {pid: [] for pid in chosen}
                 session["dj_finalized"]  = []
+                pick_deadline            = time.time() + PICK_DURATION
+                session["pick_deadline"] = pick_deadline
                 session["status"]        = "pick"
-            # If no players: game stalls on last song — acceptable edge case.
+            else:
+                pick_deadline = None
+        else:
+            pick_deadline = None
+
+    if is_last and pick_deadline is not None:
+        threading.Thread(
+            target=_pick_timer, args=(session_id, pick_deadline), daemon=True
+        ).start()
 
     time.sleep(SONG_DURATION)
 
@@ -135,16 +146,53 @@ def _play_song(session_id: str) -> None:
         threading.Thread(target=_play_song, args=(session_id,), daemon=True).start()
 
 
+def _pick_timer(session_id: str, deadline: float) -> None:
+    """Auto-finalizes all DJs when pick time expires.
+    DJs with at least one song are finalized and advance to vote.
+    DJs with no songs are removed from the lineup.
+    If no DJ picked anything, the round replays the current queue."""
+    time.sleep(max(0.0, deadline - time.time()))
+    vote_deadline = None
+    go_play       = False
+    with _lock:
+        session = _sessions.get(session_id)
+        if not session:
+            return
+        if session["status"] != "pick" or session.get("pick_deadline") != deadline:
+            return  # Already advanced manually
+        # Keep only DJs who picked at least one song
+        active_djs = [
+            pid for pid in session["dj_player_ids"]
+            if session["dj_picks"].get(pid)
+        ]
+        for pid in active_djs:
+            if pid not in session["dj_finalized"]:
+                session["dj_finalized"].append(pid)
+        session["dj_player_ids"] = active_djs
+
+        if active_djs:
+            vote_deadline = _start_vote(session)
+        else:
+            _transition_to_next_round(session)
+            go_play = True
+
+    if vote_deadline is not None:
+        threading.Thread(
+            target=_vote_timer, args=(session_id, vote_deadline), daemon=True
+        ).start()
+    elif go_play:
+        threading.Thread(target=_play_song, args=(session_id,), daemon=True).start()
+
+
 def _vote_timer(session_id: str, deadline: float) -> None:
-    """Auto-advances to next round when the vote window closes,
-    unless the host already ended voting manually."""
+    """Auto-advances to next round when the vote window closes."""
     time.sleep(max(0.0, deadline - time.time()))
     with _lock:
         session = _sessions.get(session_id)
         if not session:
             return
         if session["status"] != "vote" or session.get("vote_deadline") != deadline:
-            return   # Host already advanced, or a newer vote period replaced this one
+            return
         _transition_to_next_round(session)
     threading.Thread(target=_play_song, args=(session_id,), daemon=True).start()
 
@@ -196,6 +244,7 @@ def setup_game(req: CreateSessionRequest):
             "dj_player_ids":      [],
             "dj_picks":           {},
             "dj_finalized":       [],
+            "pick_deadline":      None,
             "vote_deadline":      None,
             "next_player_id":     1,
         }
@@ -205,7 +254,6 @@ def setup_game(req: CreateSessionRequest):
 
 @router.post("/host/add_song")
 def add_song(req: AddSongRequest):
-    """Append a song. Transitions init → play on the first addition."""
     should_start = False
     with _lock:
         session = _get_session(req.session_id)
@@ -221,7 +269,7 @@ def add_song(req: AddSongRequest):
 
 @router.post("/host/next_round")
 def next_round(session_id: str = Query(...)):
-    """Host ends voting early and immediately starts the next round."""
+    """Host ends voting early and starts the next round."""
     with _lock:
         session = _get_session(session_id)
         if session["status"] != "vote":
@@ -294,7 +342,7 @@ def dj_pick(req: DJPickRequest):
 @router.post("/dj/finalize")
 def dj_finalize(req: DJFinalizeRequest):
     """Mark DJ as done. When all DJs finalize, voting begins."""
-    deadline = None
+    vote_deadline = None
     with _lock:
         session = _get_session(req.session_id)
         if session["status"] != "pick":
@@ -306,15 +354,23 @@ def dj_finalize(req: DJFinalizeRequest):
         if req.player_id not in session["dj_finalized"]:
             session["dj_finalized"].append(req.player_id)
         if len(session["dj_finalized"]) >= len(session["dj_player_ids"]):
-            deadline = _start_vote(session)
-    if deadline is not None:
+            vote_deadline = _start_vote(session)
+    if vote_deadline is not None:
         threading.Thread(
-            target=_vote_timer, args=(req.session_id, deadline), daemon=True
+            target=_vote_timer, args=(req.session_id, vote_deadline), daemon=True
         ).start()
     return {"ok": True}
 
 
 # ── State endpoints ───────────────────────────────────────────────────────────────
+
+def _pick_fields(session: dict) -> dict:
+    deadline = session.get("pick_deadline")
+    return {
+        "pick_time_remaining": max(0, int(deadline - time.time())) if deadline else 0,
+        "pick_duration":       PICK_DURATION,
+    }
+
 
 def _vote_fields(session: dict) -> dict:
     deadline = session.get("vote_deadline")
@@ -336,6 +392,8 @@ def get_state(session_id: str = Query(...)):
         }
         if session["status"] in ("vote", "pick"):
             result["dj_vote_options"] = _build_dj_vote_options(session)
+        if session["status"] == "pick":
+            result.update(_pick_fields(session))
         if session["status"] == "vote":
             result.update(_vote_fields(session))
         return result
@@ -360,6 +418,8 @@ def get_status(session_id: str = Query(...)):
         }
         if session["status"] in ("vote", "pick"):
             result["dj_vote_options"] = _build_dj_vote_options(session)
+        if session["status"] == "pick":
+            result.update(_pick_fields(session))
         if session["status"] == "vote":
             result.update(_vote_fields(session))
         return result
