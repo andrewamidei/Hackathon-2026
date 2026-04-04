@@ -77,6 +77,8 @@ if 'selected_sp' not in st.session_state:
     st.session_state.selected_sp = None
 if 'player_name' not in st.session_state:
     st.session_state.player_name = None
+if 'username_input' not in st.session_state:
+    st.session_state.username_input = random_u_name()
 
 # # --- LOCATION DIALOG ---
 # @st.dialog("Sync Location")
@@ -167,14 +169,16 @@ if st.button("Host Lobby", use_container_width=True, type="primary"):#, disabled
 
 
 # --- JOIN SECTION ---
-with st.container(border=True):
+with st.form("join_form", border=True):
     st.markdown("### Join Lobby")
-    u_name = st.text_input("Username", random_u_name(), max_chars=15)
+    u_name = st.text_input("Username", value=st.session_state.username_input, max_chars=15)
     l_code = st.text_input("Lobby Code", max_chars=6)
-    if st.button("Join Game", use_container_width=True, type="primary"):
-        if len(l_code) == 6:
-            st.session_state.player_name = u_name
-            st.session_state.update({"login_code": l_code, "role": "player"})
-            st.switch_page("pages/DJ_Deathmatch.py")
-        else:
-            st.warning("Please enter a valid 6-character lobby code.")
+    submitted = st.form_submit_button("Join Game", use_container_width=True, type="primary")
+
+if submitted:
+    if len(l_code) == 6:
+        st.session_state.player_name = u_name.strip() or st.session_state.username_input
+        st.session_state.update({"login_code": l_code, "role": "player"})
+        st.switch_page("pages/DJ_Deathmatch.py")
+    else:
+        st.warning("Please enter a valid 6-character lobby code.")

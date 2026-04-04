@@ -40,6 +40,7 @@ MAX_DJ_SONGS = 3
 
 # ── API helpers ──────────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=1)
 def api_get(path: str):
     try:
         r = requests.get(f"{API_URL}{path}", timeout=3)
@@ -132,7 +133,7 @@ with st.sidebar:
 if st.session_state.role == "host":
     sid = st.session_state.session_id
 
-    @st.fragment(run_every=1)
+    @st.fragment(run_every=2)
     def host_view():
         state = api_get(f"/DJ/status?session_id={sid}")
         if not state:
@@ -145,8 +146,9 @@ if st.session_state.role == "host":
         status = state.get("status")
 
         if status in ("play","pick","vote"):
-            st.title(f"Now Playing: {sp_handler.get_current_track_name()}")
             current = state.get("current_song")
+            track_name = sp_handler.get_current_track_name() if sp_handler.is_authenticated() else current
+            st.title(f"Now Playing: {track_name or current or '—'}")
 
 
             # Auto-play on Spotify when the song advances
@@ -298,7 +300,7 @@ elif st.session_state.role == "player":
         st.error("Invalid lobby code. Go back and try again.")
         st.stop()
 
-    @st.fragment(run_every=1)
+    @st.fragment(run_every=2)
     def player_view():
         game_state = api_get(f"/DJ/state?session_id={sid}")
         if not game_state or "detail" in game_state:
@@ -326,12 +328,13 @@ elif st.session_state.role == "player":
 
         # ── play ──────────────────────────────────────────────────────────────
         elif status == "play":
+            current = game_state.get("current_song")
             if is_dj:
                 st.title("You're a DJ this round!")
                 st.info("Start picking your songs — the last song is playing now.")
             else:
-                st.title(f"Now Playing: {sp_handler.get_current_track_name()}")
-            current = game_state.get("current_song")
+                track_name = sp_handler.get_current_track_name() if sp_handler.is_authenticated() else current
+                st.title(f"Now Playing: {track_name or current or '—'}")
 
         # ── pick ──────────────────────────────────────────────────────────────
         elif status == "pick":
