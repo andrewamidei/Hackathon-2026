@@ -1,5 +1,6 @@
 import random
 import streamlit as st
+from components.spotifyComponents import SpotifyComponents
 
 ADJECTIVES = ["Funky", "Groovy", "Blazing", "Cosmic", "Electric", "Neon", "Wild", "Hyper"]
 NOUNS = ["DJ", "Beat", "Drop", "Vibe", "Wave", "Bass", "Pulse", "Rhythm"]
@@ -16,6 +17,8 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="collapsed"
 )
+
+SpotifyComponents.search_spotify_player()
 
 st.title("Tune Zone")
 

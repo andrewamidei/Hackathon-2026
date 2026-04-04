@@ -3,13 +3,15 @@ import streamlit.components.v1 as components
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-scopeIn = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
-sp_oauth = SpotifyOAuth(scope=scopeIn)
+scope = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
+sp_oauth = SpotifyOAuth(scope=scope)
 token_info = sp_oauth.get_cached_token()
 class SpotifyHandler:
 
-    def search_spotify_player():
-        global token_info 
+    
+    def get_spotify_client():
+        
+
         
         if "code" in st.query_params:
             auth_code = st.query_params["code"]
@@ -20,39 +22,16 @@ class SpotifyHandler:
         if not token_info:
             st.title("Spotify Streamlit Player")
             auth_url = sp_oauth.get_authorize_url()
-            st.info("Please Authenticate with Spotify to continue.")
-            st.markdown(f'<a href="{auth_url}" target="_self" style="text-decoration: none;"><div style="background-color: #1DB954; color: white; padding: 10px; text-align: center; border-radius: 25px; font-weight: bold;">Authenticate with Spotify</div></a>', unsafe_allow_html=True)
+            st.markdown(f"Please [log in to Spotify]({auth_url}) to use the music features.")
             st.stop() # Halt execution until they log in'
-        else:
-            st.title("Spotify Streamlit Player")
-            st.info("Logged into Spotify!")
-
+        
+        st.session_state.keyToken = token_info
         access_token = token_info['access_token']
         sp = spotipy.Spotify(auth=access_token)
-
-
-        search_query = st.text_input("Enter a song or artist name:")
-        
-        if search_query:
-            results = sp.search(q=search_query, limit=5, type='track')
-            tracks = results['tracks']['items']
-                
-            for track in tracks:
-                track_name = track['name']
-                artist_name = track['artists'][0]['name'] if track['artists'] else "Unknown Artist"
-                album_url = track['album']['images'][0]['url'] if track['album']['images'] else None
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.image(album_url, width=100)
-                with col2:
-                    st.write(f"**{track_name}** by {artist_name}")
-                    if st.button("▶️ Select Music", key=track['id']): 
-                        st.session_state.selected_track = track
-                        st.session_state.selected_sp = sp
-                        st.rerun()
+        return sp
 
     def render_spotify_player(selected_track,sp):
+
 
         devices = sp.devices()
         target_device_id = None
