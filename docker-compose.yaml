@@ -1,11 +1,18 @@
 services:
   web:
-    build:
-      context: .
-      network: host
+    build: .
     container_name: dug 
     ports:
       - "8501:8501"
+    stdin_open: true 
+    tty: true 
+    environment:
+      - PYTHONUNBUFFERED=1    
+    env_file:
+      - .env
     volumes:
-      - .:/app      # THIS IS THE MAGIC LINE FOR LIVE RELOAD
+      - .:/app
+    working_dir: /app
+    # Pointing to src/main.py as per your previous command
+    command: streamlit run src/main.py --server.address=0.0.0.0 --server.port=8501
     restart: unless-stopped
