@@ -2,10 +2,7 @@ import streamlit as st
 
 st.title("Host view")
 
-def lobby_info():
-    player_count = 11
-    join_code = 110294
-
+def lobby_info(join_code, player_count):
     col1, col2 = st.columns(2)
 
     with col1:
@@ -19,11 +16,7 @@ def lobby_info():
     st.info("Player1 and Player2 Are the Selected DJ's")
 
 
-def song_card():
-    image = "https://cdn1.byjus.com/wp-content/uploads/2020/08/ShapeArtboard-1-copy-4.png"
-    title = "the title"
-    artist = "the artist"
-
+def song_card(image, title, artist):
     col1, col2 = st.columns([2,4])
 
     with col1:
@@ -34,13 +27,8 @@ def song_card():
         st.markdown(f"### {title}")
         st.markdown(artist)
 
-def song_queue():
+def song_queue(image, title, artist, player):
     with st.container(border=True):
-        image = "https://cdn1.byjus.com/wp-content/uploads/2020/08/ShapeArtboard-1-copy-4.png"
-        title = "the title"
-        artist = "the artist"
-        player = "Player2"
-
         col1, col2 = st.columns([2,10], vertical_alignment="center")
 
         with col1:
@@ -50,11 +38,18 @@ def song_queue():
             st.markdown(f"**{title}** | {artist}")
             st.caption(f"Picked by {player}")
 
-lobby_info()
+image = "https://cdn1.byjus.com/wp-content/uploads/2020/08/ShapeArtboard-1-copy-4.png"
+title = "the title"
+artist = "the artist"
+player = "Player2"
+player_count = 11
+join_code = 110294
 
-song_card()
+lobby_info(join_code, player_count)
+
+song_card(image, title, artist)
 
 st.markdown("### Up Next")
-song_queue()
-song_queue()
+song_queue(image, title, artist, player)
+song_queue(image, title, artist, player)
 
