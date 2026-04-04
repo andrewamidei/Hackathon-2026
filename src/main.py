@@ -1,43 +1,34 @@
 import streamlit as st
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from dotenv import load_dotenv
-import os
-import sys
 
-load_dotenv()
+# Import your custom function from the handler file
+# from spotifyHandler import render_spotify_player
+from spotifyHandler import search_spotify_player, render_spotify_player
 
-st.title("Spotify Library Loader")
+def main():
+    
+    if 'selected_track' not in st.session_state:
+        st.session_state.selected_track = None
 
-# 1. Force terminal output for debugging
-print("\n" + "="*40, flush=True)
-print("SPOTIFY AUTH PROCESS STARTING", flush=True)
-print("="*40 + "\n", flush=True)
+    scope = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
+    sp_oauth = SpotifyOAuth(scope=scope)
+    
+    token_info = sp_oauth.get_cached_token()
+    
+    if token_info:
+        access_token = token_info['access_token']
+        sp = spotipy.Spotify(auth=access_token)
+        
 
-scope = "user-library-read"
+        search_spotify_player(sp)
+        st.title(st.session_state.selected_track['name'] if st.session_state.selected_track else "No track selected")
+        if st.session_state.selected_track:
+            # render_spotify_player(access_token, sp, st.session_state.selected_track)
+            pass
+    else:
+        st.warning("Please authenticate with Spotify.")
+        # Optional: Add a login button/link here based on sp_oauth.get_authorize_url()
 
-# 2. Setup Auth Manager with a persistent cache path
-auth_manager = SpotifyOAuth(
-    scope=scope,
-    open_browser=False,
-    cache_path=".cache" # This saves the token to your project folder
-)
-
-sp = spotipy.Spotify(auth_manager=auth_manager)
-
-st.write("Checking Spotify connection... (Check terminal if this spins forever)")
-
-try:
-    # This line triggers the "Enter URL" prompt in your terminal
-    results = sp.current_user_saved_tracks()
-
-    if results:
-        st.subheader("Your Saved Tracks:")
-        for idx, item in enumerate(results['items']):
-            track = item['track']
-            st.write(f"**{idx + 1}.** {track['name']} — *{track['artists'][0]['name']}*")
-            
-except Exception as e:
-    st.error("Action Required: Please check your Docker Terminal/Logs!")
-    # This print will definitely show up because of PYTHONUNBUFFERED=1
-    print(f"AUTHENTICATION NEEDED: {e}", flush=True)
+if __name__ == "__main__":
+    main()
