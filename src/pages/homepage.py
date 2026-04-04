@@ -1,5 +1,8 @@
 import streamlit as st
 
+
+st.session_state.role = None
+
 st.set_page_config(
     page_title="Get Started",
     page_icon="🎵",
