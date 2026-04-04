@@ -156,6 +156,12 @@ if st.session_state.role == "host":
                 try:
                     device_id = sp_handler.get_player_device_id()
                     uri       = st.session_state.sp_track_uris.get(current)
+                    # DJ-picked songs are free text — auto-resolve to a Spotify URI
+                    if not uri:
+                        results = sp_handler.search_tracks(current, limit=1)
+                        if results:
+                            uri = results[0]["uri"]
+                            st.session_state.sp_track_uris[current] = uri
                     if device_id and uri:
                         sp_handler.play_track(uri, device_id)
                         st.session_state.sp_last_played = current
