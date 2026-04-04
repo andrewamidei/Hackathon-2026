@@ -5,9 +5,6 @@ import requests
 import streamlit as st
 from components.song_input import song_input
 
-if 'session_id' not in st.session_state:
-    st.session_state.session_id = None
-
 API_URL = os.environ.get("API_URL", "http://localhost:8001")
 
 st.set_page_config(page_title="DJ Deathmatch", page_icon="🎮", layout="centered")
@@ -19,7 +16,6 @@ def api_get(path: str):
         return r.json()
     except Exception:
         return None
-
 
 def api_post(path: str, body: dict = None):
     try:
@@ -34,22 +30,34 @@ def poll(seconds: float = 2.0):
     time.sleep(seconds)
     st.rerun()
 
-if st.session_state.role == "host":
-    if st.session_state.session_id is None:
-        r = api_post("/DJ/host/setup", {"location": None, "id": 0, "name": "host"})
-        st.session_state.session_id = r.json()["session_id"]
-    sid = st.session_state.session_id
-    st.sidebar.code(sid, language=None)
-    state = api_get(f"/DJ/status?session_id={sid}")
+if 'session_id' not in st.session_state:
+    st.session_state.session_id = None
 
-    if not state:
-        st.error("Cannot reach the game API. Is it running?")
+if st.session_state.role == "host" and st.session_state.session_id is None:
+    r = api_post("/DJ/host/setup", {"location": [], "id": 0, "name": "host"})
+    if r and r.status_code == 200:
+        st.session_state.session_id = r.json()["session_id"]
+    else:
+        st.error("Failed to create game session.")
         st.stop()
 
-    status = state.get("status")
-    if status != "init":
-        st.switch_page(f"pages/{status}.py")
 
+sid = st.session_state.session_id
+st.sidebar.code(sid, language=None)
+state = api_get(f"/DJ/status?session_id={sid}")
+
+current_song = state.get("current_song") if state else None
+if current_song:
+    st.sidebar.markdown("**Now Playing**")
+    st.sidebar.info(current_song)
+
+if not state:
+    st.error("Cannot reach the game API. Is it running?")
+    st.stop()
+
+status = state.get("status")
+
+if status == "init":
     st.title("DJ Deathmatch Setup")
     song = song_input(label="Add a song to the queue", key="host_song_input")
     if song:
