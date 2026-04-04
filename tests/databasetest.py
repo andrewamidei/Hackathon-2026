@@ -1,7 +1,7 @@
 import unittest
 import os
 import pandas as pd
-from src.database import DatabaseManager as db
+from src.handlers.database import DatabaseManager as db
 
 
 class TestYourModule(unittest.TestCase):

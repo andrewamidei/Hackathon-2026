@@ -1,18 +1,20 @@
 import random
 import threading
 import time
-
+from handlers.database import DatabaseManager
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-
+import os
+url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
 router = APIRouter(prefix="/DJ", tags=["DJ"])
+db_manager = DatabaseManager(url=url)
 
 # ── In-memory state ─────────────────────────────────────────────────────────────
 
 _lock = threading.Lock()
 _sessions = {}
 
-SONG_DURATION = 30  # seconds per song
+SONG_DURATION = 10  # seconds per song
 
 
 def _get_session(session_id: str):
@@ -108,6 +110,10 @@ def setup_game(req: CreateSessionRequest):
             "dj_picks": {},
             "next_player_id": 1,
         }
+        if req.location is None:
+            db_manager.add_host((session_id,None))
+        else:
+            db_manager.add_host((session_id,req.location))
     return {"ok": True, "session_id": session_id}
 
 
@@ -192,7 +198,10 @@ def dj_pick(req: DJPickRequest):
         session["dj_picks"][req.player_id] = req.song
         # All DJs submitted — go to vote
         if len(session["dj_picks"]) >= len(session["dj_player_ids"]):
-            session["djs"] = list(session["dj_picks"].values())
+            session["djs"] = [
+                f"{session['players'][pid]['name']}: {song}"
+                for pid, song in session["dj_picks"].items()
+            ]
             session["status"] = "vote"
     return {"ok": True}
 
