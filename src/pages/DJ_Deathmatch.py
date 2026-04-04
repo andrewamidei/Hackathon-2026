@@ -9,6 +9,12 @@ API_URL = os.environ.get("API_URL", "http://localhost:8001")
 
 st.set_page_config(page_title="DJ Deathmatch", page_icon="🎮", layout="centered")
 
+# Hide form submit buttons — press Enter to submit instead
+st.markdown(
+    "<style>[data-testid='stFormSubmitButton']{display:none}</style>",
+    unsafe_allow_html=True,
+)
+
 # ── Session state defaults ──────────────────────────────────────────────────────
 
 for key, default in {
@@ -17,7 +23,8 @@ for key, default in {
     "player_id": None,
     "voted": False,
     "voted_for": None,
-    "dj_picked": False,
+    "dj_finalized": False,
+    "last_dj_ids": [],
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -42,9 +49,17 @@ def api_post(path: str, body: dict = None):
         return None
 
 
-def auto_rerun(seconds: float = 5.0):
+def poll(seconds: float = 2.0):
+    """Auto-refresh for waiting states."""
     time.sleep(seconds)
     st.rerun()
+
+
+def vote_timer_display(remaining: int, duration: int):
+    """Renders a countdown progress bar for the vote phase."""
+    fraction = remaining / duration if duration > 0 else 0
+    label = f"Voting closes in {remaining}s" if remaining > 0 else "Voting closed..."
+    st.progress(fraction, text=label)
 
 
 # ── Auto-create session for host ────────────────────────────────────────────────
@@ -67,6 +82,11 @@ if st.session_state.role == "host":
     st.sidebar.code(sid, language=None)
     state = api_get(f"/DJ/status?session_id={sid}")
 
+    current_song = state.get("current_song") if state else None
+    if current_song:
+        st.sidebar.markdown("**Now Playing**")
+        st.sidebar.info(current_song)
+
     if not state:
         st.error("Cannot reach the game API. Is it running?")
         st.stop()
@@ -74,7 +94,7 @@ if st.session_state.role == "host":
     status = state.get("status")
 
     if status == "init":
-        st.title("🎵 DJ Deathmatch Setup")
+        st.title("DJ Deathmatch Setup")
         song = song_input(label="Add a song to the queue", key="host_song_input")
         if song:
             r = api_post("/DJ/host/add_song", {"session_id": sid, "song": song})
@@ -83,51 +103,91 @@ if st.session_state.role == "host":
             else:
                 st.error("Failed to add song.")
 
+        queue = state.get("song_queue", [])
+        if queue:
+            st.subheader(f"Queue ({len(queue)} songs)")
+            for i, s in enumerate(queue):
+                st.write(f"{i + 1}. {s}")
+
         players = state.get("players", {})
         if players:
             st.subheader(f"Players ({len(players)})")
             for p in players.values():
-                st.write(f"• {p['name']}")
+                st.write(f"- {p['name']}")
+
+        poll(3)
 
     elif status == "play":
-        st.title("🎶 Now Playing")
+        st.title("Now Playing")
         current = state.get("current_song")
         if current:
             st.subheader(current)
         queue = state.get("song_queue", [])
-        st.caption(f"Song {state.get('current_song_index', 0) + 1} of {len(queue)}")
-        st.info("DJs will be selected when the last song finishes...")
-        time.sleep(5)
-        st.rerun()
+        idx = state.get("current_song_index", 0)
+        st.caption(f"Song {idx + 1} of {len(queue)}")
+        st.info("DJs are selected when the last song starts playing.")
+        poll(2)
 
     elif status == "pick":
-        st.title("🎧 DJ Pick Phase")
-        st.info("DJs are selecting their songs...")
-        dj_picks = state.get("dj_picks", {})
-        djs = state.get("djs", [])
-        st.write(f"Waiting for {len(djs) - len(dj_picks)} more DJ(s) to pick...")
-        auto_rerun(5)
+        st.title("DJ Pick Phase")
+        dj_vote_options = state.get("dj_vote_options", [])
+        finalized_count = sum(1 for d in dj_vote_options if d["finalized"])
+        st.info(f"Waiting for {len(dj_vote_options) - finalized_count} DJ(s) to finalize...")
+
+        for opt in dj_vote_options:
+            status_text = "Done" if opt["finalized"] else "Picking..."
+            with st.container(border=True):
+                st.write(f"**{opt['name']}** — {status_text}")
+                # Always show exactly 3 numbered slots
+                for slot in range(3):
+                    if slot < len(opt["songs"]):
+                        st.write(f"  {slot + 1}. {opt['songs'][slot]}")
+                    else:
+                        st.write(f"  {slot + 1}. —")
+        poll(2)
 
     elif status == "vote":
-        st.title("🗳️ Voting in Progress")
+        st.title("Voting in Progress")
+        dj_vote_options = state.get("dj_vote_options", [])
         players = state.get("players", {})
-        votes = {}
+        remaining = state.get("vote_time_remaining", 0)
+        duration = state.get("vote_duration", 30)
+
+        vote_timer_display(remaining, duration)
+
+        # Count votes per DJ name
+        vote_counts: dict[str, int] = {}
         for p in players.values():
             v = p.get("current_vote")
             if v:
-                votes[v] = votes.get(v, 0) + 1
-        if votes:
-            st.subheader("Current Votes")
-            for dj, count in sorted(votes.items(), key=lambda x: x[1], reverse=True):
-                st.metric(dj, count)
-        else:
-            st.info("Waiting for votes...")
+                vote_counts[v] = vote_counts.get(v, 0) + 1
 
-        st.write("---")
-        if st.button("▶ Next Round", type="primary", use_container_width=True):
-            api_post(f"/DJ/host/next_round?session_id={sid}")
-            st.rerun()
-        auto_rerun(5)
+        total_votes = sum(vote_counts.values())
+        st.caption(f"{total_votes} vote(s) cast")
+
+        for opt in dj_vote_options:
+            count = vote_counts.get(opt["name"], 0)
+            with st.container(border=True):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.subheader(opt["name"])
+                    for i, song in enumerate(opt["songs"]):
+                        st.write(f"{i + 1}. {song}")
+                with col2:
+                    st.metric("Votes", count)
+
+        st.divider()
+        if st.button("End Voting Early", use_container_width=True):
+            r = api_post(f"/DJ/host/next_round?session_id={sid}")
+            if r and r.status_code == 200:
+                st.rerun()
+            else:
+                st.error("Failed to start next round.")
+        poll(1)
+
+    elif status == "ended":
+        st.title("Game Over")
+        st.balloons()
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -137,97 +197,175 @@ if st.session_state.role == "host":
 elif st.session_state.role == "player":
     sid = st.session_state.get("login_code")
     game_state = api_get(f"/DJ/state?session_id={sid}") if sid else None
-    status = game_state.get("status") if game_state else None
 
-    if not sid or not game_state or "detail" in game_state:
+    if not sid or not game_state or "detail" in (game_state or {}):
         st.error("Invalid lobby code. Go back and try again.")
         st.stop()
 
+    status = game_state.get("status")
+
+    current_song = game_state.get("current_song")
+    if current_song:
+        st.sidebar.markdown("**Now Playing**")
+        st.sidebar.info(current_song)
+
     # Register player on first load
-    if "player_id" not in st.session_state or st.session_state.player_id is None:
+    if st.session_state.player_id is None:
         name = st.session_state.get("player_name") or f"player_{sid}"
         r = api_post("/DJ/player/join", {"session_id": sid, "name": name})
         if r and r.status_code == 200:
             st.session_state.player_id = r.json().get("player_id")
 
-    my_id = st.session_state.get("player_id")
+    my_id = st.session_state.player_id
     dj_ids = game_state.get("dj_player_ids", [])
     is_dj = my_id in dj_ids
 
-    # Reset per-round flags when DJ list changes (new round)
-    if st.session_state.get("last_dj_ids") != dj_ids:
+    # Reset per-round flags only when the DJ lineup changes (new round)
+    if st.session_state.last_dj_ids != dj_ids:
         st.session_state.last_dj_ids = dj_ids
-        st.session_state.dj_picked = False
+        st.session_state.dj_finalized = False
         st.session_state.voted = False
         st.session_state.voted_for = None
 
+    # ── init ────────────────────────────────────────────────────────────────────
     if status == "init":
-        st.title("⏳ Waiting for the host to start...")
-        if is_dj:
-            st.info("🎧 You are a DJ!")
-        auto_rerun(5)
+        st.title("Waiting for the host to start...")
+        poll(3)
 
+    # ── play ────────────────────────────────────────────────────────────────────
     elif status == "play":
-        current = game_state.get("current_song")
         if is_dj:
-            st.title("🎧 You're a DJ this round!")
-            st.info("Get ready to pick your song when the queue ends...")
+            st.title("You're a DJ this round!")
+            st.info("Start picking your songs — the last song is playing now.")
         else:
-            st.title("🎶 Now Playing")
+            st.title("Now Playing")
+        current = game_state.get("current_song")
         if current:
             st.subheader(current)
-        auto_rerun(5)
+        poll(2)
 
+    # ── pick ────────────────────────────────────────────────────────────────────
     elif status == "pick":
-        if is_dj and not st.session_state.get("dj_picked"):
-            st.title("🎧 Pick Your Song!")
-            song = song_input(label="Submit your song pick", key="dj_song_input")
-            if song:
-                r = api_post("/DJ/dj/pick", {
-                    "session_id": sid,
-                    "player_id": my_id or 0,
-                    "song": song,
-                })
-                if r and r.status_code == 200:
-                    st.session_state.dj_picked = True
-                    st.rerun()
-        elif is_dj:
-            st.title("🎧 Song Submitted!")
-            st.info("Waiting for other DJs...")
-            auto_rerun(5)
-        else:
-            st.title("⏳ DJs are picking their songs...")
-            auto_rerun(5)
+        dj_vote_options = game_state.get("dj_vote_options", [])
+        my_option = next((d for d in dj_vote_options if d["player_id"] == my_id), None)
 
-    elif status == "vote":
-        djs = game_state.get("djs", [])
-        if is_dj:
-            # ── DJ vote view ───────────────────────────────────────────────
-            st.title("🎧 Voting in Progress")
-            st.info("Players are voting on the DJs. Results will appear here.")
-            auto_rerun(5)
+        if is_dj and not st.session_state.dj_finalized:
+            st.title("Pick Your Songs!")
+            current_picks = my_option["songs"] if my_option else []
+
+            # Input stays fixed at the top
+            if len(current_picks) < 3:
+                song = song_input(
+                    label=f"Song {len(current_picks) + 1} of 3",
+                    key=f"dj_song_{len(current_picks)}",
+                )
+                if song:
+                    r = api_post("/DJ/dj/pick", {
+                        "session_id": sid,
+                        "player_id": my_id,
+                        "song": song,
+                    })
+                    if r and r.status_code == 200:
+                        st.rerun()
+                    else:
+                        st.error("Failed to add song. Try again.")
+            else:
+                st.info("You've picked 3 songs. Finalize when ready.")
+
+            # Picks list grows below the input
+            if current_picks:
+                st.subheader("Your picks:")
+                for i, s in enumerate(current_picks):
+                    st.write(f"{i + 1}. {s}")
+                st.divider()
+                if st.button("Finalize My Picks", type="primary", use_container_width=True):
+                    r = api_post("/DJ/dj/finalize", {
+                        "session_id": sid,
+                        "player_id": my_id,
+                    })
+                    if r and r.status_code == 200:
+                        st.session_state.dj_finalized = True
+                        st.rerun()
+                    else:
+                        st.error("Failed to finalize. Try again.")
+
+        elif is_dj and st.session_state.dj_finalized:
+            st.title("Picks Submitted!")
+            if my_option:
+                st.subheader("Your songs:")
+                for i, song in enumerate(my_option["songs"]):
+                    st.write(f"{i + 1}. {song}")
+            st.info("Waiting for other DJ(s) to finalize...")
+            poll(2)
+
         else:
-            st.title("🗳️ Vote for a Song")
-            if "last_vote_djs" not in st.session_state or st.session_state.last_vote_djs != djs:
-                st.session_state.voted = False
-                st.session_state.last_vote_djs = djs
-            if not st.session_state.get("voted"):
-                for i, dj in enumerate(djs):
-                    if st.button(dj, use_container_width=True, key=f"vote_{i}"):
-                        api_post("/DJ/player/vote", {
+            st.title("DJs are picking their songs...")
+            if dj_vote_options:
+                for opt in dj_vote_options:
+                    icon = "Done" if opt["finalized"] else "Still picking..."
+                    st.write(f"**{opt['name']}** — {icon}")
+            poll(2)
+
+    # ── vote ────────────────────────────────────────────────────────────────────
+    elif status == "vote":
+        dj_vote_options = game_state.get("dj_vote_options", [])
+        remaining = game_state.get("vote_time_remaining", 0)
+        duration = game_state.get("vote_duration", 30)
+
+        if is_dj:
+            st.title("Voting in Progress")
+            vote_timer_display(remaining, duration)
+            st.info("Players are voting. Hang tight!")
+            for opt in dj_vote_options:
+                label = "Your picks" if opt["player_id"] == my_id else opt["name"]
+                with st.container(border=True):
+                    st.subheader(label)
+                    for i, song in enumerate(opt["songs"]):
+                        st.write(f"{i + 1}. {song}")
+            poll(1)
+
+        elif not st.session_state.voted:
+            st.title("Vote for a DJ!")
+            vote_timer_display(remaining, duration)
+            st.write("Choose the DJ whose songs you want to hear next:")
+            for opt in dj_vote_options:
+                with st.container(border=True):
+                    st.subheader(opt["name"])
+                    for i, song in enumerate(opt["songs"]):
+                        st.write(f"{i + 1}. {song}")
+                    if st.button(
+                        f"Vote for {opt['name']}",
+                        key=f"vote_{opt['player_id']}",
+                        use_container_width=True,
+                        type="primary",
+                    ):
+                        r = api_post("/DJ/player/vote", {
                             "session_id": sid,
                             "player_id": my_id or 0,
-                            "vote": dj,
+                            "vote": opt["name"],
                         })
-                        st.session_state.voted = True
-                        st.session_state.voted_for = dj
-                        st.rerun()
-            else:
-                for i, dj in enumerate(djs):
-                    if dj == st.session_state.get("voted_for"):
-                        st.success(f"✅ {dj}")
+                        if r and r.status_code == 200:
+                            st.session_state.voted = True
+                            st.session_state.voted_for = opt["name"]
+                            st.rerun()
+
+        else:
+            st.title("Vote Submitted!")
+            vote_timer_display(remaining, duration)
+            st.success(f"You voted for **{st.session_state.voted_for}**")
+            for opt in dj_vote_options:
+                with st.container(border=True):
+                    if opt["name"] == st.session_state.voted_for:
+                        st.subheader(f"✓ {opt['name']} (your vote)")
                     else:
-                        st.button(dj, use_container_width=True, key=f"voted_{i}", disabled=True)
-                auto_rerun(5)
+                        st.subheader(opt["name"])
+                    for i, song in enumerate(opt["songs"]):
+                        st.write(f"{i + 1}. {song}")
+            poll(1)
 
+    elif status == "ended":
+        st.title("Game Over!")
+        st.balloons()
 
+else:
+    st.switch_page("pages/homepage.py")
