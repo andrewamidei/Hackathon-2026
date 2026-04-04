@@ -1,0 +1,9 @@
+services:
+  web:
+    build:
+      context: .
+      network: host    # FIXES LINUX: Bypasses the DNS hang during 'pip install'
+    container_name: dug
+    ports:
+      - "8501:8501"    # FIXES MAC: Forwards the VM port to physical localhost
+    restart: unless-stopped

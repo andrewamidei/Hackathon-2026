@@ -21,5 +21,5 @@ EXPOSE 8501
 # Define environment variable (optional)
 
 # Run streamlit on start up
-CMD ["streamlit", "run", "./src/main.py"]
+CMD ["streamlit", "run", "./src/main.py", "--server.address=0.0.0.0"]
 

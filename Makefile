@@ -1,23 +1,14 @@
-IMAGENAME=musicongo
-CONTAINERNAME=dug
-src = .
+.PHONY: run stop clean
 
-PWD = $(shell pwd)
+run: stop
+	@echo "Building and starting the app..."
+	docker compose up --build -d
+	@echo "App is running at http://localhost:8501"
 
-.PHONY: run
+stop:
+	@echo "Cleaning up old containers..."
+	docker compose down
 
-.PHONY: clean
-
-.PHONY: build
-
-TARGET_DIR ?= $(PWD)
-
-run:
-	docker run -p 8501:8501 dug 
-
-clean:
-	docker prune
-
-build:
-	./build.sh
-	
+clean: stop
+	@echo "Nuking all project containers and networks..."
+	docker compose down -v
