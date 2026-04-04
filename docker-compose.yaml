@@ -2,10 +2,45 @@ services:
   web:
     build:
       context: .
-      network: host
+      network: host # Fixed: 'network' inside build is different than service network
     container_name: dug 
     ports:
       - "8501:8501"
     volumes:
-      - .:/app      # THIS IS THE MAGIC LINE FOR LIVE RELOAD
+      - .:/app       
     restart: unless-stopped
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydatabase"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  tester:
+    build: 
+      context: .
+      network: host
+    
+    environment:
+      - DATABASE_URL=postgresql+psycopg://myuser:mypassword@db:5432/mydatabase
+      - PYTHONPATH=/app
+    working_dir: /app
+    volumes:
+          - .:/app       
+
+    depends_on:
+      db:
+        condition: service_healthy
+    command: python3 -m unittest tests/databasetest.py
+
+volumes:
+  pgdata:
+    driver: local

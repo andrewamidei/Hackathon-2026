@@ -2,3 +2,7 @@ streamlit
 fastapi
 uvicorn[standard]
 requests
+sqlalchemy
+pandas
+geopy
+psycopg[binary]
