@@ -2,23 +2,19 @@ import json
 import random
 import string
 import streamlit as st
+<<<<<<< HEAD
 from streamlit_js_eval import streamlit_js_eval
 from handlers.database import DatabaseManager
 
 st.set_page_config(page_title="DJ Booth", layout="centered")
 dbm = DatabaseManager()
 
-# --- DJ Logic ---
 
 def gen_code():
     first = random.choice(string.ascii_uppercase)
     rest = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
     return first + rest
 
-def random_name():
-    adj = ["Funky", "Groovy", "Blazing", "Cosmic", "Neon"]
-    noun = ["DJ", "Beat", "Drop", "Vibe", "Wave"]
-    return f"{random.choice(adj)}{random.choice(noun)}{random.randint(10, 99)}"
 
 # --- SESSION STATE DEFAULTS ---
 for key, default in {
@@ -31,7 +27,25 @@ for key, default in {
 
 st.title("🎧 DJ Booth")
 
-# 3. THE DIALOG (Standard Popup)
+=======
+# from components.assets_manager import set_png_as_page_bg, BACKGROUND_IMAGE
+from streamlit_js_eval import get_geolocation
+
+st.set_page_config(page_title="Get Started", page_icon="🎵", layout="centered")
+
+# --- DJ Logic ---
+def random_name():
+    adj = ["Funky", "Groovy", "Blazing", "Cosmic", "Neon"]
+    noun = ["DJ", "Beat", "Drop", "Vibe", "Wave"]
+    return f"{random.choice(adj)}{random.choice(noun)}{random.randint(10, 99)}"
+
+
+# GPS Session State
+if 'loc_requested' not in st.session_state:
+    st.session_state.loc_requested = False
+if 'final_coords' not in st.session_state:
+    st.session_state.final_coords = None
+>>>>>>> e59a129b95058e5e981df5efaae2a7b04e3e9608
 
 # --- GPS: one-shot JS promise, only injected when actively requested ---
 #
@@ -44,8 +58,19 @@ st.title("🎧 DJ Booth")
 # FIX: Use streamlit_js_eval() with a JS Promise directly. This only runs
 # when the block is entered (loc_req=True), and returns exactly once.
 
+<<<<<<< HEAD
 if st.session_state.loc_req and st.session_state.lat is None:
     st.info("📡 Acquiring GPS signal...")
+=======
+# set_png_as_page_bg(BACKGROUND_IMAGE)
+
+st.title("Tune Zone")
+
+# THE DIALOG (Standard Popup)
+@st.dialog("Sync Location")
+def location_dialog():
+    st.write("Establish satellite uplink to find your local vibe.")
+>>>>>>> e59a129b95058e5e981df5efaae2a7b04e3e9608
 
     result = streamlit_js_eval(
         js_expressions="""
@@ -63,11 +88,24 @@ if st.session_state.loc_req and st.session_state.lat is None:
         key="gps_eval",
     )
 
+<<<<<<< HEAD
     if result is None:
         st.info("🛰️ Waiting for browser GPS permission...")
     elif result == "null" or result is False:
         st.error("❌ GPS denied or unavailable. Please allow location access.")
         st.session_state.loc_req = False
+=======
+# 4. THE CAPTURE LOGIC (The "Fix")
+# If the user clicked 'Sync GPS', we run this block until we get data
+if st.session_state.loc_requested and st.session_state.final_coords is None:
+    # This line triggers the JS. It returns None at first, then the dict later.
+    report = get_geolocation()
+
+    if report:
+        st.session_state.final_coords = report
+        st.session_state.loc_requested = False  # Stop requesting
+        st.rerun()  # Refresh to show the success UI
+>>>>>>> e59a129b95058e5e981df5efaae2a7b04e3e9608
     else:
         try:
             coords = json.loads(result)
@@ -90,6 +128,7 @@ if st.session_state.loc_req and st.session_state.lat is None:
         except Exception:
             st.warning("📡 Parsing GPS response...")
 
+<<<<<<< HEAD
 
 # --- UI STATUS ---
 if st.session_state.lat is None:
@@ -108,6 +147,35 @@ st.divider()
 
 # --- HOST SECTION ---
 st.title("Tune Zone")
+=======
+# 5. MAIN UI LOGIC
+if not st.session_state.final_coords:
+    if st.button("Begin Setup", use_container_width=True, type="primary"):
+        location_dialog()
+
+# Case A: GPS Success
+if st.session_state.final_coords:
+    coords = st.session_state.final_coords.get('coords', {})
+    lat = coords.get('latitude')
+    lon = coords.get('longitude')
+
+    if lat and lon:
+        st.success(f"📍 Position Locked: {lat:.4f}, {lon:.4f}")
+        if "dj_name" not in st.session_state:
+            st.session_state.dj_name = random_name()
+        st.info(f"Identity Assigned: **{st.session_state.dj_name}**")
+
+        if st.button("Reset Location"):
+            st.session_state.final_coords = None
+            st.rerun()
+
+st.divider()
+
+# --- LOBBY CODE ---
+if st.button("Host Lobby", use_container_width=True):
+    st.session_state.role = "host"
+    st.switch_page("pages/init.py")
+>>>>>>> e59a129b95058e5e981df5efaae2a7b04e3e9608
 
 can_host = st.session_state.lat is not None and st.session_state.lon is not None
 

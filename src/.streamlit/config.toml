@@ -29,7 +29,7 @@ toolbarMode = "auto"
 # `pages/` directory.
 #
 # Default: true
-showSidebarNavigation = true
+showSidebarNavigation = false
 
 [runner]
 # Handle script rerun requests immediately, rather than waiting for
@@ -91,23 +91,24 @@ maxMessageSize = 200
 # Check this out these links for more info:
 # https://docs.streamlit.io/develop/concepts/configuration/theming
 
-# [theme]
-# base = "dark"
+[theme]
+base = "dark"
 
-# font = "sans-serif"
-# headingFont = "sans-serif"
-# codeFont = "monospace"
+font = "sans-serif"
+headingFont = "sans-serif"
+codeFont = "monospace"
 
-# primaryColor = "#1ed760"
-# backgroundColor = "#2a2a2a"
-# secondaryBackgroundColor = "#121212"
+primaryColor = "#A51A4F"
+backgroundColor = "#100413"
+secondaryBackgroundColor = "#2e0f38"
+textColor = "#E6E7EA"
+borderColor = "#E6E7EA"
+
 # codeBackgroundColor = "#121212"
-# textColor = "#ffffff"
 # linkColor = "#1ed760"
-# borderColor = "#7c7c7c"
-# showWidgetBorder = true
-# baseRadius = "0.3rem"
-# buttonRadius = "full"
+showWidgetBorder = true
+baseRadius = "0.3rem"
+buttonRadius = "full"
 # chartCategoricalColors = ["#ffc862", "#2d46b9", "#b49bc8"]
 
 # [theme.sidebar]
