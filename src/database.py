@@ -1,33 +1,69 @@
 import pandas as pd
 from geopy.distance import geodesic
 from sqlalchemy import create_engine, text
-
+from typing import Optional, Tuple, Union
 
 # Result is "Positive", "Negative", or "Zero"
 
 
 class DatabaseManager:
+
     def __init__(self, url=None):
         if (len(url) < 1):
 
             self.url = "postgresql+psycopg://myuser:mypassword@localhost:5432/mydatabase"
         else:
             self.url = url
-
         try:
             self.engine = create_engine(self.url)
+            self.execute_raw("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id TEXT PRIMARY KEY,
+                latitude DOUBLE PRECISION,
+                longitude DOUBLE PRECISION
+            );
+        """)
+
         except Exception as e:
             print(f"An error with the database occurred; using localhost {e}")
             self.url = "postgresql+psycopg://myuser:mypassword@localhost:5432/mydatabase"
             self.engine = create_engine(self.url)  # You'll likely want to retry the connection here
 
-    def save_data(self, df: {str: [str]}, table_name: [int], mode='append'):
-        """Saves a Pandas DataFrame to the database."""
+    def save_data(self, entry: Tuple[str, Optional[Tuple[float, float]]], table_name: str = "sessions"):
+        """
+        Saves or updates a session.
+        entry example: ("session_123", (40.7, -74.0)) or ("session_123", None)
+        """
+        session_id, coords = entry
+
+        # Unpack coordinates if they exist, otherwise set to None (SQL NULL)
+        lat = coords[0] if coords else None
+        lon = coords[1] if coords else None
+
+        # The dictionary keys must match the :placeholders in the SQL string
+        data = {
+            "session_id": session_id,
+            "latitude": lat,
+            "longitude": lon
+        }
+
+        # PostgreSQL 'UPSERT' logic:
+        # INSERT the row; if 'session_id' exists, UPDATE the latitude/longitude.
+        sql = text(f"""
+            INSERT INTO {table_name} (session_id, latitude, longitude)
+            VALUES (:session_id, :latitude, :longitude)
+            ON CONFLICT (session_id)
+            DO UPDATE SET
+                latitude = EXCLUDED.latitude,
+                longitude = EXCLUDED.longitude;
+        """)
+
         try:
-            df.to_sql(table_name, self.engine, if_exists=mode, index=False, method='multi')
-            print(f"Successfully saved to {table_name}")
+            with self.engine.begin() as conn:
+                conn.execute(sql, data)
+            print(f"Successfully updated session: {session_id}")
         except Exception as e:
-            print(f"Error saving data: {e}")
+            print(f"Error saving session data to {table_name}: {e}")
 
     def query_to_df(self, sql_query: str):
         """Runs a SELECT query and returns a DataFrame."""
@@ -37,6 +73,33 @@ class DatabaseManager:
             print(f"Error reading data: {e}")
             return pd.DataFrame()
     # DO NOT USE
+
+    def query_nearest(self, location: tuple[float, float], n: int = 5) -> list[str]:
+        """
+        Queries the database for all sessions, calculates their distance to
+        the provided location, and returns the top N nearest session IDs.
+        """
+        # 1. Fetch all sessions that actually have a location (skip NULLs)
+        query = "SELECT session_id, latitude, longitude FROM sessions WHERE latitude IS NOT NULL"
+        df = self.query_to_df(query)
+
+        if df.empty:
+            return []
+
+        # 2. Calculate distance for every row
+        # We use a lambda to apply your existing geodesic logic
+        def get_distance(row):
+            session_coords = (row['latitude'], row['longitude'])
+            # We use the raw geodesic().meters here to get the actual value for sorting
+            return geodesic(location, session_coords).meters
+
+        df['distance'] = df.apply(get_distance, axis=1)
+
+        # 3. Sort by distance (ascending) and take the top N
+        nearest_df = df.sort_values(by='distance').head(n)
+
+        # 4. Return just the list of session IDs
+        return nearest_df['session_id'].tolist()
 
     def execute_raw(self, sql_command: str):
         """Executes raw SQL (like CREATE TABLE or DELETE) without returning data."""
@@ -70,6 +133,26 @@ class DatabaseManager:
         distance = geodesic(latlon1, latlon2).meters
 
         return distance <= radius_meters
+
+    def remove_session(self, session_id: str):
+        """
+        Deletes a session from the database based on its unique ID.
+        """
+        # Use a parameterized query to prevent SQL injection
+        sql = text("DELETE FROM sessions WHERE session_id = :session_id")
+
+        try:
+            with self.engine.begin() as conn:
+                result = conn.execute(sql, {"session_id": session_id})
+
+                # Optional: Check if a row was actually deleted
+                if result.rowcount > 0:
+                    print(f"Successfully removed session: {session_id}")
+                else:
+                    print(f"No session found with ID: {session_id}")
+
+        except Exception as e:
+            print(f"Error removing session {session_id}: {e}")
 
 
 # --- Example Usage ---

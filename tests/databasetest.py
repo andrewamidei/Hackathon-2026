@@ -40,5 +40,6 @@ class TestYourModule(unittest.TestCase):
         self.assertEqual(test2, True)
 
     def test_method2(self):
+        pass
 
 
