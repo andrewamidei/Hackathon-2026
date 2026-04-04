@@ -1,0 +1,7 @@
+streamlit
+<<<<<<< HEAD
+=======
+fastapi
+uvicorn[standard]
+requests
+>>>>>>> e03ac7ecc38d5e840d78a6d4f48e9a564b378af6
