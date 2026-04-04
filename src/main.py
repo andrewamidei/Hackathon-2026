@@ -2,13 +2,18 @@ import random
 import string
 import streamlit as st
 import os
+from pathlib import Path
 from streamlit_js_eval import get_geolocation
 from handlers.database import DatabaseManager
 import spotifyHandler as sp_handler
 
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+FAVICON = ASSETS_DIR / "favicon_tp.png"
+TEXT_LOGO = ASSETS_DIR / "text_logo.png"
+
 url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
 
-st.set_page_config(page_title="Tune Zone", page_icon="🎮", layout="centered")
+st.set_page_config(page_title="Tune Zone", page_icon=str(FAVICON), layout="centered")
 
 # ── Spotify OAuth callback ────────────────────────────────────────────────────────
 # Spotify redirects to the root URL (http://127.0.0.1:8501/?code=...&state=sid=XXX).
@@ -66,14 +71,12 @@ for key, default in {
     if key not in st.session_state:
         st.session_state[key] = default
 
-# st.title("🎧 DJ Booth")
-
 if 'selected_track' not in st.session_state:
     st.session_state.selected_track = None
 if 'selected_sp' not in st.session_state:
     st.session_state.selected_sp = None
-if 'u_name' not in st.session_state:
-    st.session_state.u_name = None
+if 'player_name' not in st.session_state:
+    st.session_state.player_name = None
 
 # # --- LOCATION DIALOG ---
 # @st.dialog("Sync Location")
@@ -129,7 +132,7 @@ if 'u_name' not in st.session_state:
 # st.divider()
 
 # --- HOST SECTION ---
-st.title("Tune Zone")
+st.image(str(TEXT_LOGO), width=150)
 
 can_host = (
     st.session_state.lat is not None
@@ -170,7 +173,7 @@ with st.container(border=True):
     l_code = st.text_input("Lobby Code", max_chars=6)
     if st.button("Join Game", use_container_width=True, type="primary"):
         if len(l_code) == 6:
-            st.session_state.u_name = u_name
+            st.session_state.player_name = u_name
             st.session_state.update({"login_code": l_code, "role": "player"})
             st.switch_page("pages/DJ_Deathmatch.py")
         else:
