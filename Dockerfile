@@ -19,8 +19,7 @@ COPY . .
 EXPOSE 8501
 
 # Define environment variable (optional)
-ENV NAME World
 
 # Run streamlit on start up
-CMD ["streamlit", "run", "app.py"]
+CMD ["streamlit", "run", "./src/main.py"]
 
