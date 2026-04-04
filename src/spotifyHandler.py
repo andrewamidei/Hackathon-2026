@@ -132,8 +132,4 @@ def player_html() -> str:
             player.connect();
         }};
     </script>
-    <div style="background:#191414;color:#1DB954;padding:8px 12px;
-                border-radius:6px;font-size:13px;text-align:center;">
-        DJ Deathmatch Player — click page once to enable audio
-    </div>
     """
