@@ -74,13 +74,13 @@ if st.session_state.role == "host" and sp_handler.is_authenticated():
 # ── Host session bootstrap ───────────────────────────────────────────────────────
 
 if st.session_state.role == "host" and st.session_state.session_id is None:
-    lat = st.session_state.get("lat")
-    lon = st.session_state.get("lon")
-    if not lat or not lon:
-        st.error("No coordinates found. Please go back and sync GPS first.")
-        st.stop()
+    # lat = st.session_state.get("lat")
+    # lon = st.session_state.get("lon")
+    # if not lat or not lon:
+    #     st.error("No coordinates found. Please go back and sync GPS first.")
+    #     st.stop()
     r = api_post("/DJ/host/setup", {
-        "location": [lat, lon],
+        "location": [None, None],
         "id":       0,
         "name":     "host",
     })
