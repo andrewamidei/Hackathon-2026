@@ -65,7 +65,14 @@ def vote_timer_display(remaining: int, duration: int):
 # ── Auto-create session for host ────────────────────────────────────────────────
 
 if st.session_state.role == "host" and st.session_state.session_id is None:
-    r = api_post("/DJ/host/setup", {"location": [], "id": 0, "name": "host"})
+    if not st.session_state.get("lat") or not st.session_state.get("lon"):
+        st.error("No coordinates found. Please go back and sync GPS first.")
+        st.stop()
+    r = api_post("/DJ/host/setup", {
+        "location": [st.session_state.lat, st.session_state.lon],
+        "id": 0,
+        "name": "host",
+    })
     if r and r.status_code == 200:
         st.session_state.session_id = r.json()["session_id"]
     else:
@@ -138,7 +145,6 @@ if st.session_state.role == "host":
             status_text = "Done" if opt["finalized"] else "Picking..."
             with st.container(border=True):
                 st.write(f"**{opt['name']}** — {status_text}")
-                # Always show exactly 3 numbered slots
                 for slot in range(3):
                     if slot < len(opt["songs"]):
                         st.write(f"  {slot + 1}. {opt['songs'][slot]}")
@@ -155,7 +161,6 @@ if st.session_state.role == "host":
 
         vote_timer_display(remaining, duration)
 
-        # Count votes per DJ name
         vote_counts: dict[str, int] = {}
         for p in players.values():
             v = p.get("current_vote")
@@ -253,7 +258,6 @@ elif st.session_state.role == "player":
             st.title("Pick Your Songs!")
             current_picks = my_option["songs"] if my_option else []
 
-            # Input stays fixed at the top
             if len(current_picks) < 3:
                 song = song_input(
                     label=f"Song {len(current_picks) + 1} of 3",
@@ -272,7 +276,6 @@ elif st.session_state.role == "player":
             else:
                 st.info("You've picked 3 songs. Finalize when ready.")
 
-            # Picks list grows below the input
             if current_picks:
                 st.subheader("Your picks:")
                 for i, s in enumerate(current_picks):
