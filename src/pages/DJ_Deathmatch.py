@@ -7,18 +7,17 @@ from components.song_input import song_input
 
 API_URL = os.environ.get("API_URL", "http://localhost:8001")
 
-st.set_page_config(page_title="DJ_DeathMatch", page_icon="🎮", layout="centered")
+st.set_page_config(page_title="DJ Deathmatch", page_icon="🎮", layout="centered")
 
 # ── Session state defaults ──────────────────────────────────────────────────────
 
 for key, default in {
     "role": None,
-    "player_name": None,
-    "answered": False,
-    "last_q_index": -1,
-    "questions": [],
-    "last_answer_result": None,
     "session_id": None,
+    "player_id": None,
+    "voted": False,
+    "voted_for": None,
+    "dj_picked": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -43,21 +42,13 @@ def api_post(path: str, body: dict = None):
         return None
 
 
-def leaderboard(players: dict):
-    sorted_p = sorted(players.items(), key=lambda x: x[1]["score"], reverse=True)
-    medals = ["🥇", "🥈", "🥉"]
-    for rank, (name, data) in enumerate(sorted_p):
-        prefix = medals[rank] if rank < 3 else f"{rank + 1}."
-        you = " ← you" if name == st.session_state.player_name else ""
-        st.write(f"{prefix} **{name}** — {data['score']} pts{you}")
-
-
-def auto_rerun(seconds: float = 2.0):
+def auto_rerun(seconds: float = 5.0):
     time.sleep(seconds)
     st.rerun()
 
 
-# Auto-create a session for the host if they don't have one yet
+# ── Auto-create session for host ────────────────────────────────────────────────
+
 if st.session_state.role == "host" and st.session_state.session_id is None:
     r = api_post("/DJ/host/setup", {"location": [], "id": 0, "name": "host"})
     if r and r.status_code == 200:
@@ -68,31 +59,6 @@ if st.session_state.role == "host" and st.session_state.session_id is None:
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# PLAYER VIEW
-# ════════════════════════════════════════════════════════════════════════════════
-
-if st.session_state.role == "player":
-    sid = st.session_state.session_id
-    game_state = api_get(f"/DJ/state?session_id={sid}")
-    status = game_state.get("status") if game_state else None
-
-    # ── Init: waiting for host to start ───────────────────────────────────────
-    if status == "init":
-        st.title("⏳ Waiting for the host to start...")
-
-    # ── Pick / Play: waiting ───────────────────────────────────────────────────
-    elif status in ("pick", "play"):
-        st.title("⏳ Waiting...")
-
-    # ── Vote: vote on the current songs ───────────────────────────────────────
-    elif status == "vote":
-        st.title("🗳️ Vote for a Song")
-        pass
-
-
-if st.session_state.role == "DJ":
-    pass
-# ════════════════════════════════════════════════════════════════════════════════
 # HOST VIEW
 # ════════════════════════════════════════════════════════════════════════════════
 
@@ -101,146 +67,67 @@ if st.session_state.role == "host":
     st.sidebar.code(sid, language=None)
     state = api_get(f"/DJ/status?session_id={sid}")
 
-    if state and state.get("status") == "init":
-        st.title("🎵 DJ Deathmatch Setup")
-        song = song_input(label="Add a song to the queue", key="host_song_input")
-        if song:
-            st.success(f"Added: {song}")
-
-if st.session_state.role == "host1":
-    sid = st.session_state.session_id
-    game = api_get(f"/DJ/status?session_id={sid}")
-
-    if game is None:
+    if not state:
         st.error("Cannot reach the game API. Is it running?")
         st.stop()
 
-    # ── Lobby / Setup ──────────────────────────────────────────────────────────
-    if game["status"] in ("idle", "lobby"):
-        st.title("🎯 Game Setup")
+    status = state.get("status")
 
-        with st.form("add_q", clear_on_submit=True):
-            q_text = st.text_input("Question")
-            col1, col2 = st.columns(2)
-            with col1:
-                opt_a = st.text_input("Option A")
-                opt_b = st.text_input("Option B")
-            with col2:
-                opt_c = st.text_input("Option C")
-                opt_d = st.text_input("Option D")
-            correct = st.selectbox("Correct answer", ["A", "B", "C", "D"])
-            add = st.form_submit_button("Add Question")
-
-        if add and q_text.strip():
-            st.session_state.questions.append({
-                "question": q_text.strip(),
-                "options": [opt_a, opt_b, opt_c, opt_d],
-                "correct": ["A", "B", "C", "D"].index(correct),
-            })
-
-        if st.session_state.questions:
-            st.subheader(f"Questions ({len(st.session_state.questions)})")
-            for i, q in enumerate(st.session_state.questions):
-                c1, c2 = st.columns([8, 1])
-                c1.write(f"**{i+1}.** {q['question']}")
-                if c2.button("✕", key=f"del_{i}"):
-                    st.session_state.questions.pop(i)
-                    st.rerun()
-
-            st.write("---")
-            st.subheader(f"Players in lobby: {game['player_count']}")
-            for name in game["players"]:
-                st.write(f"• {name}")
-
-            if st.button("🚀 Start Game", type="primary", use_container_width=True):
-                r = api_post("/DJ/host/setup", {"questions": st.session_state.questions})
-                if r and r.status_code == 200:
-                    api_post("/DJ/host/start")
-                    st.rerun()
-                else:
-                    st.error("Failed to set up game.")
-
-        # Refresh lobby player count
-        if game["status"] == "lobby":
-            auto_rerun(3)
-
-    # ── Active question ────────────────────────────────────────────────────────
-    elif game["status"] == "question":
-        q = game["question"]
-        idx = game["current_index"]
-        total = game["total_questions"]
-
-        st.progress((idx + 1) / total)
-        st.caption(f"Question {idx + 1} of {total}")
-        st.title(q["text"])
-
-        cols = st.columns(2)
-        for i, opt in enumerate(q["options"]):
-            cols[i % 2].button(
-                f"{'ABCD'[i]}. {opt}",
-                use_container_width=True,
-                disabled=True,
-            )
-
-        answered = sum(1 for p in game["players"].values() if p["answered"])
-        st.metric("Answered", f"{answered} / {game['player_count']}")
-
-        st.write("---")
-        if st.button("⏭ Reveal Answers", type="primary", use_container_width=True):
-            api_post("/DJ/host/next")
-            st.rerun()
-
-        auto_rerun(2)
-
-    # ── Reveal ─────────────────────────────────────────────────────────────────
-    elif game["status"] == "reveal":
-        q = game["question"]
-        idx = game["current_index"]
-        total = game["total_questions"]
-
-        st.progress((idx + 1) / total)
-        st.caption(f"Question {idx + 1} of {total}")
-        st.title(q["text"])
-
-        correct_i = q["correct"]
-        for i, opt in enumerate(q["options"]):
-            label = f"{'ABCD'[i]}. {opt}"
-            if i == correct_i:
-                st.success(f"✅ {label}")
+    if status == "init":
+        st.title("🎵 DJ Deathmatch Setup")
+        song = song_input(label="Add a song to the queue", key="host_song_input")
+        if song:
+            r = api_post("/DJ/host/add_song", {"session_id": sid, "song": song})
+            if r and r.status_code == 200:
+                st.rerun()
             else:
-                st.button(label, use_container_width=True, disabled=True)
+                st.error("Failed to add song.")
 
-        answers = q.get("answers", {})
-        correct_players = [n for n, a in answers.items() if a == correct_i]
-        wrong_players = [n for n, a in answers.items() if a != correct_i]
-        no_answer = [n for n in game["players"] if n not in answers]
+        players = state.get("players", {})
+        if players:
+            st.subheader(f"Players ({len(players)})")
+            for p in players.values():
+                st.write(f"• {p['name']}")
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Correct", len(correct_players))
-        col2.metric("Wrong", len(wrong_players))
-        col3.metric("No answer", len(no_answer))
+    elif status == "play":
+        st.title("🎶 Now Playing")
+        current = state.get("current_song")
+        if current:
+            st.subheader(current)
+        queue = state.get("song_queue", [])
+        st.caption(f"Song {state.get('current_song_index', 0) + 1} of {len(queue)}")
+        st.info("DJs will be selected when the last song finishes...")
+        time.sleep(5)
+        st.rerun()
+
+    elif status == "pick":
+        st.title("🎧 DJ Pick Phase")
+        st.info("DJs are selecting their songs...")
+        dj_picks = state.get("dj_picks", {})
+        djs = state.get("djs", [])
+        st.write(f"Waiting for {len(djs) - len(dj_picks)} more DJ(s) to pick...")
+        auto_rerun(5)
+
+    elif status == "vote":
+        st.title("🗳️ Voting in Progress")
+        players = state.get("players", {})
+        votes = {}
+        for p in players.values():
+            v = p.get("current_vote")
+            if v:
+                votes[v] = votes.get(v, 0) + 1
+        if votes:
+            st.subheader("Current Votes")
+            for dj, count in sorted(votes.items(), key=lambda x: x[1], reverse=True):
+                st.metric(dj, count)
+        else:
+            st.info("Waiting for votes...")
 
         st.write("---")
-        st.subheader("Leaderboard")
-        leaderboard(game["players"])
-
-        st.write("---")
-        next_label = "➡ Next Question" if idx + 1 < total else "🏁 Show Final Results"
-        if st.button(next_label, type="primary", use_container_width=True):
-            api_post("/DJ/host/next")
+        if st.button("▶ Next Round", type="primary", use_container_width=True):
+            api_post(f"/DJ/host/next_round?session_id={sid}")
             st.rerun()
-
-    # ── Ended ──────────────────────────────────────────────────────────────────
-    elif game["status"] == "ended":
-        st.title("🏆 Final Results")
-        leaderboard(game["players"])
-
-        st.write("---")
-        if st.button("🔄 Play Again", use_container_width=True):
-            st.session_state.questions = []
-            st.session_state.role = "host"
-            api_post("/DJ/host/setup", {"questions": []})
-            st.rerun()
+        auto_rerun(5)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -248,106 +135,99 @@ if st.session_state.role == "host1":
 # ════════════════════════════════════════════════════════════════════════════════
 
 elif st.session_state.role == "player":
+    sid = st.session_state.get("login_code")
+    game_state = api_get(f"/DJ/state?session_id={sid}") if sid else None
+    status = game_state.get("status") if game_state else None
 
-    # ── Join screen ────────────────────────────────────────────────────────────
-    if st.session_state.player_name is None:
-        st.title("🙋 Join Game")
-        name = st.text_input("Your name")
-        if st.button("Join", type="primary") and name.strip():
-            r = api_post("/DJ/player/join", {"name": name.strip()})
-            if r and r.status_code == 200:
-                st.session_state.player_name = name.strip()
-                st.rerun()
-            else:
-                detail = r.json().get("detail", "Error") if r else "Cannot reach server"
-                st.error(detail)
+    if not sid or not game_state or "detail" in game_state:
+        st.error("Invalid lobby code. Go back and try again.")
         st.stop()
 
-    # ── In-game ────────────────────────────────────────────────────────────────
-    name = st.session_state.player_name
-    game = api_get("/DJ/state")
+    # Register player on first load
+    if "player_id" not in st.session_state or st.session_state.player_id is None:
+        name = st.session_state.get("player_name") or f"player_{sid}"
+        r = api_post("/DJ/player/join", {"session_id": sid, "name": name})
+        if r and r.status_code == 200:
+            st.session_state.player_id = r.json().get("player_id")
 
-    if game is None:
-        st.error("Cannot reach the game server. Retrying...")
-        auto_rerun(3)
-        st.stop()
+    my_id = st.session_state.get("player_id")
+    dj_ids = game_state.get("dj_player_ids", [])
+    is_dj = my_id in dj_ids
 
-    my_score = game["players"].get(name, {}).get("score", 0)
-    st.sidebar.metric("Your score", my_score)
-    st.sidebar.write(f"Players: {game['player_count']}")
+    # Reset per-round flags when DJ list changes (new round)
+    if st.session_state.get("last_dj_ids") != dj_ids:
+        st.session_state.last_dj_ids = dj_ids
+        st.session_state.dj_picked = False
+        st.session_state.voted = False
+        st.session_state.voted_for = None
 
-    # ── Waiting in lobby ───────────────────────────────────────────────────────
-    if game["status"] in ("idle", "lobby"):
+    if status == "init":
         st.title("⏳ Waiting for the host to start...")
-        st.write(f"**{game['player_count']}** player(s) in lobby.")
-        auto_rerun(2)
+        if is_dj:
+            st.info("🎧 You are a DJ!")
+        auto_rerun(5)
 
-    # ── Active question ────────────────────────────────────────────────────────
-    elif game["status"] == "question":
-        q = game["question"]
-        idx = game["current_index"]
-        total = game["total_questions"]
-
-        # Reset answered flag when question changes
-        if idx != st.session_state.last_q_index:
-            st.session_state.answered = False
-            st.session_state.last_q_index = idx
-            st.session_state.last_answer_result = None
-
-        st.progress((idx + 1) / total)
-        st.caption(f"Question {idx + 1} of {total}")
-        st.title(q["text"])
-
-        if not st.session_state.answered:
-            cols = st.columns(2)
-            for i, opt in enumerate(q["options"]):
-                with cols[i % 2]:
-                    if st.button(f"{'ABCD'[i]}. {opt}", use_container_width=True, key=f"opt_{i}"):
-                        r = api_post("/DJ/player/answer", {"name": name, "answer": i})
-                        if r and r.status_code == 200:
-                            st.session_state.answered = True
-                            st.session_state.last_answer_result = r.json()
-                            st.rerun()
-                        elif r:
-                            st.error(r.json().get("detail", "Error"))
+    elif status == "play":
+        current = game_state.get("current_song")
+        if is_dj:
+            st.title("🎧 You're a DJ this round!")
+            st.info("Get ready to pick your song when the queue ends...")
         else:
-            result = st.session_state.last_answer_result
-            if result and result.get("correct"):
-                st.success(f"✅ Correct! +{result['points']} pts")
-            elif result:
-                st.error("❌ Wrong answer")
-            st.info("Waiting for the host to reveal answers...")
-            auto_rerun(2)
+            st.title("🎶 Now Playing")
+        if current:
+            st.subheader(current)
+        auto_rerun(5)
 
-    # ── Reveal ─────────────────────────────────────────────────────────────────
-    elif game["status"] == "reveal":
-        q = game["question"]
-        idx = game["current_index"]
-        total = game["total_questions"]
+    elif status == "pick":
+        if is_dj and not st.session_state.get("dj_picked"):
+            st.title("🎧 Pick Your Song!")
+            song = song_input(label="Submit your song pick", key="dj_song_input")
+            if song:
+                r = api_post("/DJ/dj/pick", {
+                    "session_id": sid,
+                    "player_id": my_id or 0,
+                    "song": song,
+                })
+                if r and r.status_code == 200:
+                    st.session_state.dj_picked = True
+                    st.rerun()
+        elif is_dj:
+            st.title("🎧 Song Submitted!")
+            st.info("Waiting for other DJs...")
+            auto_rerun(5)
+        else:
+            st.title("⏳ DJs are picking their songs...")
+            auto_rerun(5)
 
-        st.progress((idx + 1) / total)
-        st.caption(f"Question {idx + 1} of {total}")
-        st.title(q["text"])
-
-        correct_i = q["correct"]
-        my_answer = q.get("answers", {}).get(name)
-
-        for i, opt in enumerate(q["options"]):
-            label = f"{'ABCD'[i]}. {opt}"
-            if i == correct_i:
-                st.success(f"✅ {label}")
-            elif my_answer == i:
-                st.error(f"❌ {label} (your answer)")
+    elif status == "vote":
+        djs = game_state.get("djs", [])
+        if is_dj:
+            # ── DJ vote view ───────────────────────────────────────────────
+            st.title("🎧 Voting in Progress")
+            st.info("Players are voting on the DJs. Results will appear here.")
+            auto_rerun(5)
+        else:
+            st.title("🗳️ Vote for a Song")
+            if "last_vote_djs" not in st.session_state or st.session_state.last_vote_djs != djs:
+                st.session_state.voted = False
+                st.session_state.last_vote_djs = djs
+            if not st.session_state.get("voted"):
+                for i, dj in enumerate(djs):
+                    if st.button(dj, use_container_width=True, key=f"vote_{i}"):
+                        api_post("/DJ/player/vote", {
+                            "session_id": sid,
+                            "player_id": my_id or 0,
+                            "vote": dj,
+                        })
+                        st.session_state.voted = True
+                        st.session_state.voted_for = dj
+                        st.rerun()
             else:
-                st.button(label, use_container_width=True, disabled=True)
+                for i, dj in enumerate(djs):
+                    if dj == st.session_state.get("voted_for"):
+                        st.success(f"✅ {dj}")
+                    else:
+                        st.button(dj, use_container_width=True, key=f"voted_{i}", disabled=True)
+                auto_rerun(5)
 
-        if my_answer is None:
-            st.warning("⏰ You didn't answer in time.")
 
-        st.metric("Your Score", my_score)
-        auto_rerun(2)
-
-    # ── Ended ──────────────────────────────────────────────────────────────────
-    elif game["status"] == "ended":
-        st.title("🏆 Game Over!")
-        leaderboard(game["players"])
