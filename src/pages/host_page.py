@@ -1,4 +1,26 @@
+import os
+
+import requests
 import streamlit as st
+
+API_URL = os.environ.get("API_URL", "http://localhost:8000")
+
+def api_get(path: str):
+    try:
+        r = requests.get(f"{API_URL}{path}", timeout=3)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+    
+game = api_get("/DJ/status")
+
+st.markdown(game)
+
+if game is None:
+    st.error("Cannot reach the game API. Is it running?")
+    st.stop()
+
 
 st.title("Host view")
 
