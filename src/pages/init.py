@@ -34,6 +34,7 @@ def poll(seconds: float = 2.0):
 if st.session_state.role == "host":
     if st.session_state.session_id is None:
         r = api_post("/DJ/host/setup", {"location": None, "id": 0, "name": "host"})
+        st.session_state.session_id = r.json()["session_id"]
     sid = st.session_state.session_id
     st.sidebar.code(sid, language=None)
     state = api_get(f"/DJ/status?session_id={sid}")
@@ -43,6 +44,8 @@ if st.session_state.role == "host":
         st.stop()
 
     status = state.get("status")
+    if status != "init":
+        st.switch_page(f"pages/{status}.py")
 
     st.title("DJ Deathmatch Setup")
     song = song_input(label="Add a song to the queue", key="host_song_input")
