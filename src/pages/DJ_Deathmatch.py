@@ -144,6 +144,29 @@ if st.session_state.role == "host":
 
         status = state.get("status")
 
+        if status in ("play","pick","vote"):
+            st.title(f"Now Playing: {sp_handler.get_current_track_name()}")
+            current = state.get("current_song")
+
+
+            # Auto-play on Spotify when the song advances
+            if current and current != st.session_state.sp_last_played and sp_handler.is_authenticated():
+                try:
+                    device_id = sp_handler.get_player_device_id()
+                    uri       = st.session_state.sp_track_uris.get(current)
+                    if device_id and uri:
+                        sp_handler.play_track(uri, device_id)
+                        st.session_state.sp_last_played = current
+                    elif not device_id:
+                        st.warning("Spotify player not found — click the page once to wake it up.")
+                except Exception as e:
+                    st.warning(f"Spotify playback error: {e}")
+
+            queue = state.get("song_queue", [])
+            idx   = state.get("current_song_index", 0)
+            st.caption(f"Song 1 of {sp_handler.get_queue_size()}")
+            st.info("DJs are selected when the last song starts playing.")
+
         # ── init ─────────────────────────────────────────────────────────────────
         if status == "init":
             st.title("DJ Deathmatch Setup")
@@ -175,6 +198,10 @@ if st.session_state.role == "host":
                                 st.rerun()
                             else:
                                 st.error("Failed to add song.")
+                
+
+                
+                
             else:
                 st.info("Connect Spotify in the sidebar to search for songs.")
                 song = song_input(label="Or add a song title manually", key="host_song_input")
@@ -197,30 +224,6 @@ if st.session_state.role == "host":
                 for p in players.values():
                     st.write(f"- {p['name']}")
 
-        # ── play ──────────────────────────────────────────────────────────────────
-        elif status == "play":
-            st.title("Now Playing")
-            current = state.get("current_song")
-            if current:
-                st.subheader(current)
-
-            # Auto-play on Spotify when the song advances
-            if current and current != st.session_state.sp_last_played and sp_handler.is_authenticated():
-                try:
-                    device_id = sp_handler.get_player_device_id()
-                    uri       = st.session_state.sp_track_uris.get(current)
-                    if device_id and uri:
-                        sp_handler.play_track(uri, device_id)
-                        st.session_state.sp_last_played = current
-                    elif not device_id:
-                        st.warning("Spotify player not found — click the page once to wake it up.")
-                except Exception as e:
-                    st.warning(f"Spotify playback error: {e}")
-
-            queue = state.get("song_queue", [])
-            idx   = state.get("current_song_index", 0)
-            st.caption(f"Song {idx + 1} of {len(queue)}")
-            st.info("DJs are selected when the last song starts playing.")
 
         # ── pick ──────────────────────────────────────────────────────────────────
         elif status == "pick":
@@ -329,10 +332,8 @@ elif st.session_state.role == "player":
                 st.title("You're a DJ this round!")
                 st.info("Start picking your songs — the last song is playing now.")
             else:
-                st.title("Now Playing")
+                st.title(f"Now Playing: {sp_handler.get_current_track_name()}")
             current = game_state.get("current_song")
-            if current:
-                st.subheader(current)
 
         # ── pick ──────────────────────────────────────────────────────────────
         elif status == "pick":
@@ -345,7 +346,7 @@ elif st.session_state.role == "player":
             pick_duration  = game_state.get("pick_duration", 60)
 
             if is_dj and not st.session_state.dj_finalized:
-                st.title("Pick Your Songs!")
+                st.title("You're a DJ! Pick Your Songs!")
                 timer_bar(pick_remaining, pick_duration, "Time to pick:", "Time's up!")
 
                 current_picks = my_option["songs"] if my_option else []

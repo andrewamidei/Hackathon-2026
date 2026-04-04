@@ -6,6 +6,7 @@ import time
 from fastapi import APIRouter, HTTPException, Query
 from handlers.database import DatabaseManager
 from pydantic import BaseModel
+import spotifyHandler as sp_handler
 
 url = os.getenv("DATABASE_URL", "postgresql+psycopg://myuser:mypassword@db:5432/mydatabase")
 router = APIRouter(prefix="/DJ", tags=["DJ"])
@@ -65,16 +66,25 @@ def _tally_winner(session: dict) -> int | None:
 
 
 def _transition_to_next_round(session: dict) -> None:
-    """Tally votes, swap in winner's songs, reset to play.
-    Caller must hold _lock and start a _play_song thread after releasing."""
+    """Tally votes, swap in winner's songs, and reset to play."""
     winner_pid = _tally_winner(session)
+    
+    # If no one voted, pick a random DJ from the current lineup
     if winner_pid is None and session["dj_player_ids"]:
         winner_pid = random.choice(session["dj_player_ids"])
 
+    # Default to current queue if no winner is found
+    new_queue = list(session["song_queue"])
+    
+    # Only queue songs if we have a valid winner with picks
     if winner_pid is not None and session["dj_picks"].get(winner_pid):
         new_queue = list(session["dj_picks"][winner_pid])
-    else:
-        new_queue = list(session["song_queue"])
+        # Send winning tracks to the Spotify physical queue (only once)
+        for song in new_queue:
+            try:
+                sp_handler.search_and_add_to_queue(song)
+            except Exception as e:
+                print(f"Error queueing to Spotify: {e}")
 
     session["song_queue"]         = new_queue
     session["current_song_index"] = 0
@@ -84,13 +94,13 @@ def _transition_to_next_round(session: dict) -> None:
     session["pick_deadline"]      = None
     session["vote_deadline"]      = None
     session["status"]             = "play"
+    
     for p in session["players"].values():
         p["current_vote"] = None
 
 
 def _start_vote(session: dict) -> float:
-    """Record vote deadline and flip status to vote.
-    Caller must hold _lock. Returns deadline so caller can start _vote_timer."""
+    """Record vote deadline and flip status to vote."""
     deadline                 = time.time() + VOTE_DURATION
     session["vote_deadline"] = deadline
     session["pick_deadline"] = None
@@ -101,8 +111,7 @@ def _start_vote(session: dict) -> float:
 # ── Background threads ────────────────────────────────────────────────────────────
 
 def _play_song(session_id: str) -> None:
-    """Runs when a song begins. On the last song, DJs are selected immediately
-    and the pick timer starts so picking runs in parallel with the final track."""
+    """Runs when a song begins. On the last song, DJs are selected immediately."""
     is_last = False
 
     with _lock:
@@ -113,7 +122,7 @@ def _play_song(session_id: str) -> None:
         if not q:
             return
         idx     = session["current_song_index"]
-        is_last = idx >= len(q) - 1
+        is_last = sp_handler.get_queue_size() <= 1
 
         if is_last:
             player_ids = list(session["players"].keys())
@@ -147,10 +156,7 @@ def _play_song(session_id: str) -> None:
 
 
 def _pick_timer(session_id: str, deadline: float) -> None:
-    """Auto-finalizes all DJs when pick time expires.
-    DJs with at least one song are finalized and advance to vote.
-    DJs with no songs are removed from the lineup.
-    If no DJ picked anything, the round replays the current queue."""
+    """Auto-finalizes all DJs when pick time expires."""
     time.sleep(max(0.0, deadline - time.time()))
     vote_deadline = None
     go_play       = False
@@ -159,8 +165,8 @@ def _pick_timer(session_id: str, deadline: float) -> None:
         if not session:
             return
         if session["status"] != "pick" or session.get("pick_deadline") != deadline:
-            return  # Already advanced manually
-        # Keep only DJs who picked at least one song
+            return 
+            
         active_djs = [
             pid for pid in session["dj_player_ids"]
             if session["dj_picks"].get(pid)
@@ -283,7 +289,7 @@ def next_round(session_id: str = Query(...)):
 def end_game(session_id: str = Query(...)):
     with _lock:
         session = _get_session(session_id)
-        session["status"] = "ended"
+        session["status"] = "play"
     return {"ok": True}
 
 
@@ -323,7 +329,7 @@ def vote(req: VoteRequest):
 
 @router.post("/dj/pick")
 def dj_pick(req: DJPickRequest):
-    """DJ adds one song to their list (up to MAX_DJ_SONGS)."""
+    """DJ adds one song to their list."""
     with _lock:
         session = _get_session(req.session_id)
         if session["status"] != "pick":
@@ -334,14 +340,14 @@ def dj_pick(req: DJPickRequest):
             raise HTTPException(status_code=400, detail="Already finalized")
         picks = session["dj_picks"].setdefault(req.player_id, [])
         if len(picks) >= MAX_DJ_SONGS:
-            raise HTTPException(status_code=400, detail=f"Maximum {MAX_DJ_SONGS} songs per DJ")
+            raise HTTPException(status_code=400, detail=f"Max {MAX_DJ_SONGS} songs")
         picks.append(req.song)
     return {"ok": True}
 
 
 @router.post("/dj/finalize")
 def dj_finalize(req: DJFinalizeRequest):
-    """Mark DJ as done. When all DJs finalize, voting begins."""
+    """Mark DJ as done."""
     vote_deadline = None
     with _lock:
         session = _get_session(req.session_id)

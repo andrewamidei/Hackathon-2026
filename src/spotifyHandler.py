@@ -44,10 +44,38 @@ def handle_callback(code: str) -> None:
     global _token_info
     _token_info = _oauth.get_access_token(code, as_dict=True)
 
+def get_current_track_name() -> Optional[str]:
+    """
+    Returns only the name of the currently playing track.
+    Returns None if no track is playing.
+    """
+    try:
+        sp = get_client()
+        playback = sp.current_playback()
+        if playback and playback.get("item"):
+            return playback["item"]["name"]
+        return None
+    except Exception as e:
+        print(f"Error fetching track name: {e}")
+        return None
 
 def is_authenticated() -> bool:
     return _token_info is not None
 
+def get_queue_size() -> int:
+    """
+    Returns the number of tracks currently in the Spotify queue 
+    (excluding the currently playing track).
+    """
+    try:
+        sp = get_client()
+        queue_data = sp.queue()
+        if queue_data and "queue" in queue_data:
+            return len(queue_data["queue"])
+        return 0
+    except Exception as e:
+        print(f"Error fetching queue size: {e}")
+        return 0
 
 def get_client() -> spotipy.Spotify:
     """Return a ready Spotify client, refreshing the token if needed."""
@@ -137,3 +165,40 @@ def player_html() -> str:
         DJ Deathmatch Player — click page once to enable audio
     </div>
     """
+
+
+def search_and_add_to_queue(query: str, device_id: Optional[str] = None) -> bool:
+    """
+    Takes a string, searches Spotify for the top result, and adds it to the queue.
+    """
+    try:
+        sp = get_client()
+        # Search for the track
+        results = sp.search(q=query, limit=1, type="track")
+        items = results.get("tracks", {}).get("items", [])
+        
+        if not items:
+            print(f"No results found for: {query}")
+            return False
+            
+        track_uri = items[0]["uri"]
+        
+        # If no device_id provided, try to find the DJ Deathmatch player
+        if not device_id:
+            device_id = get_player_device_id()
+            
+        if device_id:
+            sp.add_to_queue(uri=track_uri, device_id=device_id)
+            return True
+        return False
+    except Exception as e:
+        print(f"Error in search_and_add_to_queue: {e}")
+        return False
+
+def add_to_queue(track_uri: str, device_id: str) -> bool:
+    """Adds a specific URI to the Spotify queue."""
+    try:
+        get_client().add_to_queue(uri=track_uri, device_id=device_id)
+        return True
+    except Exception:
+        return False
