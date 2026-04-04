@@ -6,7 +6,7 @@ import streamlit as st
 
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
 
-st.set_page_config(page_title="QuizGame", page_icon="🎮", layout="centered")
+st.set_page_config(page_title="DJ_DeathMatch", page_icon="🎮", layout="centered")
 
 # ── Session state defaults ──────────────────────────────────────────────────────
 
@@ -72,12 +72,19 @@ if st.session_state.role is None:
     st.stop()
 
 
+
+if st.session_state.role == "player":
+    pass
+
+
+if st.session_state.role == "DJ":
+    pass
 # ════════════════════════════════════════════════════════════════════════════════
 # HOST VIEW
 # ════════════════════════════════════════════════════════════════════════════════
 
 if st.session_state.role == "host":
-    game = api_get("/game/state")
+    game = api_get("/kahoot/state")
 
     if game is None:
         st.error("Cannot reach the game API. Is it running?")
@@ -121,9 +128,9 @@ if st.session_state.role == "host":
                 st.write(f"• {name}")
 
             if st.button("🚀 Start Game", type="primary", use_container_width=True):
-                r = api_post("/host/setup", {"questions": st.session_state.questions})
+                r = api_post("/kahoot/host/setup", {"questions": st.session_state.questions})
                 if r and r.status_code == 200:
-                    api_post("/host/start")
+                    api_post("/kahoot/host/start")
                     st.rerun()
                 else:
                     st.error("Failed to set up game.")
@@ -155,7 +162,7 @@ if st.session_state.role == "host":
 
         st.write("---")
         if st.button("⏭ Reveal Answers", type="primary", use_container_width=True):
-            api_post("/host/next")
+            api_post("/kahoot/host/next")
             st.rerun()
 
         auto_rerun(2)
@@ -195,7 +202,7 @@ if st.session_state.role == "host":
         st.write("---")
         next_label = "➡ Next Question" if idx + 1 < total else "🏁 Show Final Results"
         if st.button(next_label, type="primary", use_container_width=True):
-            api_post("/host/next")
+            api_post("/kahoot/host/next")
             st.rerun()
 
     # ── Ended ──────────────────────────────────────────────────────────────────
@@ -207,7 +214,7 @@ if st.session_state.role == "host":
         if st.button("🔄 Play Again", use_container_width=True):
             st.session_state.questions = []
             st.session_state.role = "host"
-            api_post("/host/setup", {"questions": []})
+            api_post("/kahoot/host/setup", {"questions": []})
             st.rerun()
 
 
@@ -222,7 +229,7 @@ elif st.session_state.role == "player":
         st.title("🙋 Join Game")
         name = st.text_input("Your name")
         if st.button("Join", type="primary") and name.strip():
-            r = api_post("/player/join", {"name": name.strip()})
+            r = api_post("/kahoot/player/join", {"name": name.strip()})
             if r and r.status_code == 200:
                 st.session_state.player_name = name.strip()
                 st.rerun()
@@ -233,7 +240,7 @@ elif st.session_state.role == "player":
 
     # ── In-game ────────────────────────────────────────────────────────────────
     name = st.session_state.player_name
-    game = api_get("/game/state")
+    game = api_get("/kahoot/state")
 
     if game is None:
         st.error("Cannot reach the game server. Retrying...")
@@ -271,7 +278,7 @@ elif st.session_state.role == "player":
             for i, opt in enumerate(q["options"]):
                 with cols[i % 2]:
                     if st.button(f"{'ABCD'[i]}. {opt}", use_container_width=True, key=f"opt_{i}"):
-                        r = api_post("/player/answer", {"name": name, "answer": i})
+                        r = api_post("/kahoot/player/answer", {"name": name, "answer": i})
                         if r and r.status_code == 200:
                             st.session_state.answered = True
                             st.session_state.last_answer_result = r.json()
