@@ -15,9 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of your app's source code from your host to your image filesystem
 COPY . .
 
-# Streamlit (public) + FastAPI (internal)
+# Only expose Streamlit — FastAPI runs internally on 8000
 EXPOSE 8501
-EXPOSE 8000
 
 RUN chmod +x start.sh
 
