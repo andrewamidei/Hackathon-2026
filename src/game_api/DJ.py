@@ -91,7 +91,7 @@ def _vote_timer(session_id: str, deadline: float):
         threading.Thread(target=_play_song, args=(session_id,), daemon=True).start()
 
 
-def _start_vote(session):
+def _start_vote(session, session_id: str):
     """Set vote deadline and kick off timer. Must be called while holding _lock."""
     deadline = time.time() + VOTE_DURATION
     session["vote_deadline"] = deadline
@@ -295,7 +295,7 @@ def dj_finalize(req: DJFinalizeRequest):
         if req.player_id not in session["dj_finalized"]:
             session["dj_finalized"].append(req.player_id)
         if len(session["dj_finalized"]) >= len(session["dj_player_ids"]):
-            deadline = _start_vote(session)
+            deadline = _start_vote(session, req.session_id)
     if deadline is not None:
         threading.Thread(target=_vote_timer, args=(req.session_id, deadline), daemon=True).start()
     return {"ok": True}
@@ -308,12 +308,14 @@ def get_state(session_id: str = Query(...)):
     """Player-facing state."""
     with _lock:
         session = _get_session(session_id)
-        idx = session["current_song_index"]
         result = {
             "status": session["status"],
             "dj_player_ids": list(session["dj_player_ids"]),
-            "current_song": session["song_queue"][idx] if idx < len(session["song_queue"]) else None,
         }
+        if session["status"] == "play":
+            idx = session["current_song_index"]
+            if idx < len(session["song_queue"]):
+                result["current_song"] = session["song_queue"][idx]
         if session["status"] in ("vote", "pick"):
             result["dj_vote_options"] = _build_dj_vote_options(session)
         if session["status"] == "vote":

@@ -21,7 +21,7 @@ st.title("Tune Zone")
 
 if st.button("Host Lobby", use_container_width=True):
     st.session_state.role = "host"
-    st.switch_page("pages/DJ_Deathmatch.py")
+    st.switch_page("pages/init.py")
 
 with st.container(border=True, horizontal_alignment="center",gap="small"):
     st.markdown("Join Lobby")
