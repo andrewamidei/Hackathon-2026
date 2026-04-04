@@ -74,6 +74,7 @@ if st.session_state.role == "host" and sp_handler.is_authenticated():
 # ── Host session bootstrap ───────────────────────────────────────────────────────
 
 if st.session_state.role == "host" and st.session_state.session_id is None:
+    r = api_post("/DJ/host/setup", {"location": [], "id": 0, "name": "host"})
     lat = st.session_state.get("lat")
     lon = st.session_state.get("lon")
     if not lat or not lon:
@@ -279,6 +280,60 @@ if st.session_state.role == "host":
                 else:
                     st.error("Failed to start next round.")
 
+        for opt in dj_vote_options:
+            status_text = "Done" if opt["finalized"] else "Picking..."
+            with st.container(border=True):
+                st.write(f"**{opt['name']}** — {status_text}")
+                # Always show exactly 3 numbered slots
+                for slot in range(3):
+                    if slot < len(opt["songs"]):
+                        st.write(f"  {slot + 1}. {opt['songs'][slot]}")
+                    else:
+                        st.write(f"  {slot + 1}. —")
+        poll(2)
+
+    elif status == "vote":
+        st.title("Voting in Progress")
+        dj_vote_options = state.get("dj_vote_options", [])
+        players = state.get("players", {})
+        remaining = state.get("vote_time_remaining", 0)
+        duration = state.get("vote_duration", 30)
+
+        vote_timer_display(remaining, duration)
+
+        # Count votes per DJ name
+        vote_counts: dict[str, int] = {}
+        for p in players.values():
+            v = p.get("current_vote")
+            if v:
+                vote_counts[v] = vote_counts.get(v, 0) + 1
+
+        total_votes = sum(vote_counts.values())
+        st.caption(f"{total_votes} vote(s) cast")
+
+        for opt in dj_vote_options:
+            count = vote_counts.get(opt["name"], 0)
+            with st.container(border=True):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.subheader(opt["name"])
+                    for i, song in enumerate(opt["songs"]):
+                        st.write(f"{i + 1}. {song}")
+                with col2:
+                    st.metric("Votes", count)
+
+        st.divider()
+        if st.button("End Voting Early", use_container_width=True):
+            r = api_post(f"/DJ/host/next_round?session_id={sid}")
+            if r and r.status_code == 200:
+                st.rerun()
+            else:
+                st.error("Failed to start next round.")
+        poll(1)
+
+    elif status == "ended":
+        st.title("Game Over")
+        st.balloons()
         # ── ended ─────────────────────────────────────────────────────────────────
         elif status == "ended":
             st.title("Game Over")
